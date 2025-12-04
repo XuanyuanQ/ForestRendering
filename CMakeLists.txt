@@ -121,7 +121,15 @@ add_subdirectory ("${CMAKE_SOURCE_DIR}/src/core")
 # ------------------------------------------------------------------------------
 set(MAIN_SOURCE "src/main.cpp")
 
-add_executable(ForestScene ${MAIN_SOURCE})
+set(SCENE_SOURCE 
+    "src/ForestScene.cpp" 
+    "src/ForestScene.hpp"
+)
+
+add_executable(ForestScene 
+    ${MAIN_SOURCE}
+    ${SCENE_SOURCE} 
+)
 
 target_link_libraries(ForestScene
     PRIVATE
