@@ -1,55 +1,66 @@
-
-#pragma once // 防止重复引用
+#pragma once
 
 #include <vector>
+#include <string>
+#include <unordered_map>
 #include <glm/glm.hpp>
-#include <glad/glad.h>
-#include <GLFW/glfw3.h>
 
+#include "core/Bonobo.h"
 #include "core/FPSCamera.h"
 #include "core/InputHandler.h"
-#include "core/Bonobo.h"
 #include "core/WindowManager.hpp"
-#include "core/helpers.hpp" 
+#include "core/ShaderProgramManager.hpp"
+#include "core/node.hpp"
 
 class ForestScene {
 public:
-	// 构造函数：初始化相机和输入
 	ForestScene(WindowManager& windowManager);
-	
-	// 析构函数：清理资源
 	~ForestScene();
 
-	// 初始化：加载模型、Shader、生成矩阵
 	bool setup();
-
-	// 更新：处理输入、移动相机
 	void update(double deltaTimeUs);
-
-	// 渲染：画所有的东西
 	void render(GLFWwindow* window);
 
-	// 获取相关对象（供 main 创建窗口用）
 	InputHandler& getInputHandler() { return _inputHandler; }
 	FPSCameraf& getCamera() { return _camera; }
 
 private:
-	// 内部辅助函数：生成随机树木矩阵
-	std::vector<glm::mat4> generateTreeTransforms(int count, float area_size);
+	// 生成矩阵数据的辅助函数
+	std::vector<glm::mat4> generateTreeTransforms(int count);
 
-	// --- 成员变量 ---
+	WindowManager& _windowManager;
 	InputHandler _inputHandler;
 	FPSCameraf   _camera;
-	WindowManager& _windowManager;
+	ShaderProgramManager _programManager;
 
-	// 资源 ID
-	GLuint _treeShader;
-	GLuint _instanceVBO;
+	// --- 资源 ID ---
+	GLuint _fallbackShader; // 树木用的 Shader
+	GLuint _waveShader;     // 地面用的 Wave Shader
 	
-	// 树木数据
-	std::vector<bonobo::mesh_data> _treeMeshes;
-	int _treeCount;
+	// --- 纹理 ---
+	GLuint _texBark;
+	GLuint _texLeaf;
+	GLuint _texLeafMask;
+	GLuint _texFloor;
 
-	// 地面数据
-	bonobo::mesh_data _groundMesh;
+	// --- 核心数据 ---
+	GLuint _instanceVBO; // 实例化矩阵缓冲
+	int _treeCount;      // 树的数量
+
+	// 使用 Node 存储树木的各个部分
+	std::unordered_map<std::string, Node> _trees;
+
+	// 地面 Node 和 Mesh
+	Node _quadNode;
+	bonobo::mesh_data _waveMesh; // 
+
+	// --- 状态变量 ---
+	float _elapsedTimeS;
+	bool _isLeavesMesh;
+	glm::vec3 _lightPosition;
+
+	// UI 控制
+	bonobo::cull_mode_t _cullMode;
+	bonobo::polygon_mode_t _polygonMode;
+	bool _showGui;
 };
