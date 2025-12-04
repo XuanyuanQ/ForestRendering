@@ -91,12 +91,13 @@ bool ForestScene::setup() {
 		glBindBuffer(GL_ARRAY_BUFFER, _instanceVBO);
 		
 		size_t vec4Size = sizeof(glm::vec4);
-		// Location 3, 4, 5, 6
-		for (int i = 0; i < 4; i++) {
-			glEnableVertexAttribArray(3 + i);
-			glVertexAttribPointer(3 + i, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4), (void*)(i * vec4Size));
-			glVertexAttribDivisor(3 + i, 1);
-		}
+
+		int baseLocation = 7; // <--- 从 7 开始，避开 tangent(3) 和 binormal(4)
+			for (int i = 0; i < 4; i++) {
+				glEnableVertexAttribArray(baseLocation + i);
+				glVertexAttribPointer(baseLocation + i, 4, GL_FLOAT, GL_FALSE, sizeof(glm::mat4), (void*)(i * vec4Size));
+				glVertexAttribDivisor(baseLocation + i, 1);
+			}
 		
 		// 返回 _instanceVBO 的 ID，
 		return _instanceVBO;
@@ -119,7 +120,8 @@ bool ForestScene::setup() {
 	GLuint maple_bark = bonobo::loadTexture2D(config::resources_path("47-mapletree/maple_bark.png"));
 	GLuint maple_leaf = bonobo::loadTexture2D(config::resources_path("47-mapletree/maple_leaf.png"));
 	GLuint leaves_alpha = bonobo::loadTexture2D(config::resources_path("47-mapletree/maple_leaf_Mask.jpg"));
-
+	GLuint maple_leaf_normal = bonobo::loadTexture2D(config::resources_path("47-mapletree/maple_leaf_normal.png"));
+	GLuint maple_bark_normal = bonobo::loadTexture2D(config::resources_path("47-mapletree/maple_bark_normal.png"));
 	// ----------------------------------------------------------------
 	// 5. 构建 Node 结构
 	// ----------------------------------------------------------------
@@ -144,7 +146,8 @@ bool ForestScene::setup() {
 		node.add_texture("maple_bark", maple_bark, GL_TEXTURE_2D);
 		node.add_texture("maple_leaf", maple_leaf, GL_TEXTURE_2D);
 		node.add_texture("leaves_alpha", leaves_alpha, GL_TEXTURE_2D);
-
+		node.add_texture("maple_leaf_normal", maple_leaf_normal, GL_TEXTURE_2D);
+		node.add_texture("maple_bark_normal", maple_bark_normal, GL_TEXTURE_2D);
 		_trees.insert({obj.name, node});
 	}
 
