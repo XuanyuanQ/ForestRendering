@@ -229,10 +229,6 @@ bool ForestScene::setup() {
       config::resources_path("47-mapletree/maple_leaf.png"));
   GLuint maple_bark_normal = bonobo::loadTexture2D(
       config::resources_path("47-mapletree/maple_bark.png"));
-  //   GLuint maple_leaf_normal = bonobo::loadTexture2D(
-  //       config::resources_path("47-mapletree/maple_leaf_normal.png"));
-  //   GLuint maple_bark_normal = bonobo::loadTexture2D(
-  //       config::resources_path("47-mapletree/maple_bark_normal.png"));
 
   GLuint grass_leaf = bonobo::loadTexture2D(
       config::resources_path("91-trava-kolosok/TravaKolosok.jpg"));
