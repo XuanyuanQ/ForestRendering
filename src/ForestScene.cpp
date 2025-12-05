@@ -13,15 +13,15 @@ ForestScene::ForestScene(WindowManager &windowManager)
               static_cast<float>(config::resolution_x) /
                   static_cast<float>(config::resolution_y),
               0.01f, 1000.0f) {
-  _camera.mWorld.SetTranslate(glm::vec3(0.0f, 12.0f, 75.0f));
+  _camera.mWorld.SetTranslate(glm::vec3(0.0f, 10.0f, 20.0f));
   _camera.mMouseSensitivity = glm::vec2(0.003f);
   _camera.mMovementSpeed = glm::vec3(3.0f);
 
   _treeCount = 25;
-  _grassCount = 5000;
+  _grassCount = 1000;
   _elapsedTimeS = 0.0f;
   _isLeavesMesh = false;
-  _lightPosition = glm::vec3(-2.0f, 10.0f, 6.0f);
+  _lightPosition = glm::vec3(-2.0f, 4.0f, -2.0f);
 
   _cullMode = bonobo::cull_mode_t::disabled;
   _polygonMode = bonobo::polygon_mode_t::fill;
@@ -33,34 +33,8 @@ ForestScene::ForestScene(WindowManager &windowManager)
 ForestScene::~ForestScene() {
   if (_instanceVBO != 0)
     glDeleteBuffers(1, &_instanceVBO);
-  glDeleteVertexArrays(1, &_terrainVao);
-  glDeleteBuffers(1, &_terrainVbo);
   // Node 的析构函数会自动清理它管理的资源，不需要手动 glDeleteProgram 等
 }
-
-std::vector<glm::mat4> ForestScene::generateTreeTransforms(int count, int Width,
-                                                           int Depth) {
-  std::vector<glm::mat4> matrices;
-  matrices.reserve(count);
-  int forestWidth = 100;
-  int forestDepth = 100;
-
-  for (int i = 0; i < count; i++) {
-    glm::mat4 model = glm::mat4(1.0f);
-    float x = ((rand() % 10000) / 10000.0f) * forestWidth - forestWidth / 2.0f;
-    float z = ((rand() % 10000) / 10000.0f) * forestDepth - forestDepth / 2.0f;
-    float y = -4.0f + ((rand() % 1000) / 1000.0f) * 0.5f;
-    model = glm::translate(model, glm::vec3(x, y, z));
-    float scale = 0.8f + ((rand() % 500) / 1000.0f);
-    model = glm::scale(model, glm::vec3(scale));
-    float rotAngle = static_cast<float>(rand() % 360);
-    model =
-        glm::rotate(model, glm::radians(rotAngle), glm::vec3(0.0f, 1.0f, 0.0f));
-    matrices.push_back(model);
-  }
-  return matrices;
-}
-
 GLuint ForestScene::createQuadsForPatch() {
   std::vector<float> vertices;
   float width = 100.f;
@@ -120,6 +94,30 @@ GLuint ForestScene::createQuadsForPatch() {
   _terrainVbo = terrainVBO;
   return terrainVAO;
 }
+
+std::vector<glm::mat4> ForestScene::generateTreeTransforms(int count, int Width,
+                                                           int Depth) {
+  std::vector<glm::mat4> matrices;
+  matrices.reserve(count);
+  int forestWidth = Width;
+  int forestDepth = Depth;
+
+  for (int i = 0; i < count; i++) {
+    glm::mat4 model = glm::mat4(1.0f);
+    float x = ((rand() % 10000) / 10000.0f) * forestWidth - forestWidth / 2.0f;
+    float z = ((rand() % 10000) / 10000.0f) * forestDepth - forestDepth / 2.0f;
+    float y = -4.0f + ((rand() % 1000) / 1000.0f) * 0.5f;
+    model = glm::translate(model, glm::vec3(x, y, z));
+    float scale = 0.8f + ((rand() % 500) / 1000.0f);
+    model = glm::scale(model, glm::vec3(scale));
+    float rotAngle = static_cast<float>(rand() % 360);
+    model =
+        glm::rotate(model, glm::radians(rotAngle), glm::vec3(0.0f, 1.0f, 0.0f));
+    matrices.push_back(model);
+  }
+  return matrices;
+}
+
 bool ForestScene::setup() {
   // ----------------------------------------------------------------
   // 1. 加载 Shader
@@ -129,17 +127,16 @@ bool ForestScene::setup() {
       {{ShaderType::vertex, "default.vert"},
        {ShaderType::fragment, "default.frag"}},
       _fallbackShader);
-  _programManager.CreateAndRegisterProgram(
-      "grassShader",
-      {{ShaderType::vertex, "grass.vert"},
-       {ShaderType::fragment, "grass.frag"}},
-      _grassShader);
 
   _programManager.CreateAndRegisterProgram(
       "Wave",
       {{ShaderType::vertex, "wave.vert"}, {ShaderType::fragment, "wave.frag"}},
       _waveShader);
-
+  _programManager.CreateAndRegisterProgram(
+      "grassShader",
+      {{ShaderType::vertex, "grass.vert"},
+       {ShaderType::fragment, "grass.frag"}},
+      _grassShader);
   GLuint tessHeightMapShader;
   _programManager.CreateAndRegisterProgram(
       "tessHeightMap",
@@ -149,23 +146,20 @@ bool ForestScene::setup() {
        {ShaderType::fragment, "terrain.frag"}},
       _tessHeightMapShader);
 
+  if (_tessHeightMapShader == 0) {
+    LogError("11Failed to load shaders.");
+    return false;
+  }
   if (_fallbackShader == 0 || _tessHeightMapShader == 0 || _grassShader == 0) {
     LogError("Failed to load shaders.");
     return false;
   }
 
-  GLint success;
-  char infoLog[512];
-  glGetProgramiv(_tessHeightMapShader, GL_LINK_STATUS, &success);
-  if (!success) {
-    glGetProgramInfoLog(_tessHeightMapShader, 512, NULL, infoLog);
-    std::cerr << "Shader program link error: " << infoLog << std::endl;
-  }
   // ----------------------------------------------------------------
   // 2. 准备 Instancing VBO Setup 函数
   // ----------------------------------------------------------------
   // 先生成矩阵数据
-  auto tree_matrices = generateTreeTransforms(_treeCount, 100, 100);
+  auto tree_matrices = generateTreeTransforms(_treeCount);
 
   // 把矩阵上传到 VBO
   glGenBuffers(1, &_instanceVBO);
@@ -179,18 +173,23 @@ bool ForestScene::setup() {
     glBindBuffer(GL_ARRAY_BUFFER, _instanceVBO);
 
     size_t vec4Size = sizeof(glm::vec4);
-    // Location 3, 4, 5, 6
-    int offset = 7;
+
+    int baseLocation = 7; // <--- 从 7 开始，避开 tangent(3) 和 binormal(4)
     for (int i = 0; i < 4; i++) {
-      glEnableVertexAttribArray(offset + i);
-      glVertexAttribPointer(offset + i, 4, GL_FLOAT, GL_FALSE,
+      glEnableVertexAttribArray(baseLocation + i);
+      glVertexAttribPointer(baseLocation + i, 4, GL_FLOAT, GL_FALSE,
                             sizeof(glm::mat4), (void *)(i * vec4Size));
-      glVertexAttribDivisor(offset + i, 1);
+      glVertexAttribDivisor(baseLocation + i, 1);
     }
 
     // 返回 _instanceVBO 的 ID，
     return _instanceVBO;
   };
+
+  // ----------------------------------------------------------------
+  // 3. 加载模型 (传入 setupInstanceVBO 回调)
+  // ----------------------------------------------------------------
+  // 把矩阵上传到 VBO
 
   std::vector<bonobo::mesh_data> tree_meshes = bonobo::loadObjects(
       config::resources_path("47-mapletree/MapleTree.obj"), setupInstanceVBO);
@@ -199,10 +198,7 @@ bool ForestScene::setup() {
     LogError("Failed to load res/MapleTree.obj");
     return false;
   }
-
-  auto grass_matrices = generateTreeTransforms(_grassCount, 20, 1000);
-
-  // 把矩阵上传到 VBO
+  auto grass_matrices = generateTreeTransforms(_grassCount, 100, 100);
   glGenBuffers(1, &_instanceVBO);
   glBindBuffer(GL_ARRAY_BUFFER, _instanceVBO);
   glBufferData(GL_ARRAY_BUFFER, _grassCount * sizeof(glm::mat4),
@@ -211,7 +207,6 @@ bool ForestScene::setup() {
   std::vector<bonobo::mesh_data> grass_meshes = bonobo::loadObjects(
       config::resources_path("91-trava-kolosok/TravaKolosok.obj"),
       setupInstanceVBO);
-
   if (grass_meshes.empty()) {
     LogError("Failed to load res/MapleTree.obj");
     return false;
@@ -226,10 +221,9 @@ bool ForestScene::setup() {
   GLuint leaves_alpha = bonobo::loadTexture2D(
       config::resources_path("47-mapletree/maple_leaf_Mask.jpg"));
   GLuint maple_leaf_normal = bonobo::loadTexture2D(
-      config::resources_path("47-mapletree/maple_leaf.png"));
+      config::resources_path("47-mapletree/maple_leaf_normal.png"));
   GLuint maple_bark_normal = bonobo::loadTexture2D(
-      config::resources_path("47-mapletree/maple_bark.png"));
-
+      config::resources_path("47-mapletree/maple_bark_normal.png"));
   GLuint grass_leaf = bonobo::loadTexture2D(
       config::resources_path("91-trava-kolosok/TravaKolosok.jpg"));
   GLuint grass_alpha = bonobo::loadTexture2D(
@@ -237,9 +231,9 @@ bool ForestScene::setup() {
   // ----------------------------------------------------------------
   // 5. 构建 Node 结构
   // ----------------------------------------------------------------
-
+  auto p = _camera.mWorld.GetTranslation();
   // 定义 Uniform 设置回调
-  auto set_uniforms = [this](GLuint program) {
+  auto set_uniforms = [this, &p](GLuint program) {
     glUniform1i(glGetUniformLocation(program, "is_leaves"),
                 _isLeavesMesh ? 1 : 0);
     glUniform3fv(glGetUniformLocation(program, "light_position"), 1,
@@ -251,9 +245,7 @@ bool ForestScene::setup() {
 
   // 遍历所有 Mesh，创建 Node
   for (auto &obj : tree_meshes) {
-
     Node node;
-    // std::cout << "vertex number:" << obj.vertices.size() << std::endl;
     node.set_geometry(obj);
 
     // 设置 Shader 和 Uniform 回调
@@ -271,7 +263,7 @@ bool ForestScene::setup() {
   for (auto &obj : grass_meshes) {
     Node node;
     node.set_geometry(obj);
-
+    std::cout << "grass_meshes" << std::endl;
     // 设置 Shader 和 Uniform 回调
     node.set_program(&_grassShader, set_uniforms);
 
@@ -284,9 +276,7 @@ bool ForestScene::setup() {
   // ----------------------------------------------------------------
   // 6. 配置 Wave 地面 Node
   // ----------------------------------------------------------------
-  std::cout << "_NUM_PATCH_PTS:" << _NUM_PATCH_PTS << std::endl;
-  _waveMesh =
-      parametric_shapes::createQuad(100.0f, 100.0f, 20, 20, _NUM_PATCH_PTS);
+  _waveMesh = parametric_shapes::createQuad(100.0f, 100.0f, 1000, 1000);
 
   auto wave_uniforms = [this](GLuint program) {
     glUniform1i(glGetUniformLocation(program, "use_normal_mapping"), 0);
@@ -302,6 +292,13 @@ bool ForestScene::setup() {
     glUniform1f(glGetUniformLocation(program, "shininess"), 10.0f);
   };
 
+  _quadNode.set_geometry(_waveMesh);
+  _quadNode.set_program(&_waveShader, wave_uniforms);
+
+  GLuint floor_tex = bonobo::loadTexture2D(
+      config::resources_path("forested-floor/textures/KiplingerFLOOR.png"));
+  _quadNode.add_texture("diffuse_texture", floor_tex, GL_TEXTURE_2D);
+
   _terrain_Uniforms = [this](GLuint program) {
     glUniformMatrix4fv(glGetUniformLocation(program, "vertex_model_to_world"),
                        1, GL_FALSE, glm::value_ptr(this->_terrain_world));
@@ -312,9 +309,6 @@ bool ForestScene::setup() {
         glGetUniformLocation(program, "vertex_view_to_projection"), 1, GL_FALSE,
         glm::value_ptr(_camera.GetViewToClipMatrix()));
   };
-  //   _quadNode.set_geometry(_waveMesh);
-  //   _quadNode.set_program(&_waveShader, wave_uniforms);
-  //   _quadNode.set_program(&_waveShader, _terrain_Uniforms);
   _grass_tex = bonobo::loadTexture2D(
       config::resources_path("forested-floor/textures/KiplingerFLOOR.png"));
   _floor_tex = bonobo::loadTexture2D(
@@ -339,9 +333,6 @@ void ForestScene::update(double deltaTimeUs) {
 
   if (_inputHandler.GetKeycodeState(GLFW_KEY_F2) & JUST_RELEASED)
     _showGui = !_showGui;
-  //   std::cout << _camera.mWorld.GetTranslation()[0] << ","
-  //             << _camera.mWorld.GetTranslation()[1] << ","
-  //             << _camera.mWorld.GetTranslation()[2] << std::endl;
 }
 
 void ForestScene::render(GLFWwindow *window) {
@@ -354,30 +345,34 @@ void ForestScene::render(GLFWwindow *window) {
   bonobo::changePolygonMode(_polygonMode);
 
   // 1. 渲染地面
-  //   Node::render 通常接受(VP矩阵, Model矩阵)
+  // Node::render 通常接受 (VP矩阵, Model矩阵)
   {
+    // p = _camera.mWorld.GetTranslation();
     _terrain_world =
         glm::mat4(glm::mat4(1.0f) * _quadNode.get_transform().GetMatrix());
-    //   _quadNode.render(_camera.GetWorldToClipMatrix(), glm::mat4(1.0f));
-    glUseProgram(_tessHeightMapShader);
-    _terrain_Uniforms(_tessHeightMapShader);
-    {
-      glActiveTexture(GL_TEXTURE0);
-      glBindTexture(GL_TEXTURE_2D, _floor_tex);
-      glUniform1i(glGetUniformLocation(_tessHeightMapShader, "diffuse_texture"),
-                  0);
-      glActiveTexture(GL_TEXTURE1);
-      glBindTexture(GL_TEXTURE_2D, _grass_tex);
-      glUniform1i(glGetUniformLocation(_tessHeightMapShader, "grass_texture"),
-                  1);
-    }
-    glBindVertexArray(_terrainVao);
-    glDrawArrays(GL_PATCHES, 0, _NUM_PATCH_PTS * 100 * 100);
-    glBindVertexArray(0u);
-    glUseProgram(0);
+    _quadNode.render(_camera.GetWorldToClipMatrix(), glm::mat4(1.0f));
+    // glUseProgram(_tessHeightMapShader);
+    // _terrain_Uniforms(_tessHeightMapShader);
+    // {
+    //   glActiveTexture(GL_TEXTURE0);
+    //   glBindTexture(GL_TEXTURE_2D, _floor_tex);
+    //   glUniform1i(glGetUniformLocation(_tessHeightMapShader,
+    //   "diffuse_texture"),
+    //               0);
+    //   glActiveTexture(GL_TEXTURE1);
+    //   glBindTexture(GL_TEXTURE_2D, _grass_tex);
+    //   glUniform1i(glGetUniformLocation(_tessHeightMapShader,
+    //   "grass_texture"),
+    //               1);
+    // }
+    // glBindVertexArray(_terrainVao);
+    // glDrawArrays(GL_PATCHES, 0, _NUM_PATCH_PTS * 100 * 100);
+    // glBindVertexArray(0u);
+    // glUseProgram(0);
   }
 
   // 2. 渲染树木
+
   for (auto &t : _trees) {
     // 根据名字判断是否为树叶，并设置状态变量
     // 这个变量会被上面定义的 set_uniforms lambda 捕获并传给 shader
@@ -393,7 +388,6 @@ void ForestScene::render(GLFWwindow *window) {
     t.second.render(_camera.GetWorldToClipMatrix(), glm::mat4(1.0f),
                     _treeCount);
   }
-
   for (auto &g : _grass) {
     glDisable(GL_CULL_FACE);
     g.second.render(_camera.GetWorldToClipMatrix(), glm::mat4(1.0f),

@@ -10,17 +10,14 @@
 // the vertex array, and therefore will be filled with normals taken out of our
 // buffer.
 layout(location = 0) in vec3 vertex;
-// layout(location = 2) in vec3 normal;
-layout(location = 1) in vec3 texcoord;
-// layout(location = 3) in vec3 tangent;
-// layout(location = 4) in vec3 binormal;
+layout(location = 1) in vec3 normal;
+layout(location = 2) in vec3 texcoord;
+layout(location = 3) in vec3 tangent;
+layout(location = 4) in vec3 binormal;
 
-// uniform mat4 vertex_model_to_world;
-// uniform mat4 normal_model_to_world;
-// uniform mat4 vertex_world_to_clip;
 uniform mat4 vertex_model_to_world;
-uniform mat4 vertex_world_to_view;
-uniform mat4 vertex_view_to_projection;
+uniform mat4 normal_model_to_world;
+uniform mat4 vertex_world_to_clip;
 
 // This is the custom output of this shader. If you want to retrieve this data
 // from another shader further down the pipeline, you need to declare the exact
@@ -55,7 +52,6 @@ void main() {
   float wave2 = waveFun(time, 0.5, 0.4, 1.3, 2.0, vec2(-0.7, 0.7), point);
 
   vs_out.texcoord = texcoord.xy;
-  gl_Position = vertex_view_to_projection * vertex_world_to_view *
-                vertex_model_to_world *
+  gl_Position = vertex_world_to_clip * vertex_model_to_world *
                 vec4(vec3(point.x, 1.0 * (wave1 + wave2), point.z), 1.0);
 }

@@ -35,5 +35,5 @@ void main() {
   vs_out.fV = camera_position - vec3(model_to_world * vec4(vertex, 1.0));
   vs_out.fL = light_position - vec3(model_to_world * vec4(vertex, 1.0));
   gl_Position =
-      vertex_world_to_clip * model_to_world * vec4(vertex * 0.015, 1.0);
+      vertex_world_to_clip * model_to_world * vec4(vertex * 0.02, 1.0);
 }

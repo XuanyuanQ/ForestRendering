@@ -26,8 +26,8 @@ public:
 
 private:
   // 生成矩阵数据的辅助函数
-  std::vector<glm::mat4> generateTreeTransforms(int count, int Width,
-                                                int Depth);
+  std::vector<glm::mat4> generateTreeTransforms(int count, int Width = 100,
+                                                int Depth = 100);
 
   GLuint createQuadsForPatch();
 
@@ -79,4 +79,5 @@ private:
 
   GLuint _terrainVao;
   GLuint _terrainVbo;
+  // glm::vec3 p;
 };
