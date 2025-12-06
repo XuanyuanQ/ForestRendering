@@ -33,7 +33,7 @@ void main() {
   vs_out.texcoord = texcoord.xy;
   vs_out.normal = vec3(normal_model_to_world * vec4(normal, 0.0));
   vs_out.fV = camera_position - vec3(model_to_world * vec4(vertex, 1.0));
-  vs_out.fL = light_position - vec3(model_to_world * vec4(vertex, 1.0));
+  vs_out.fL = light_position;
   gl_Position =
       vertex_world_to_clip * model_to_world * vec4(vertex * 0.02, 1.0);
 }
