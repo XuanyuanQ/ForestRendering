@@ -319,6 +319,8 @@ bool ForestScene::setup() {
       config::resources_path("forested-floor/textures/iceland_heightmap.png"));
   //   _quadNode.add_texture("diffuse_texture", _floor_tex, GL_TEXTURE_2D);
   createQuadsForPatch();
+	
+  initSkybox();
   // ----------------------------------------------------------------
   // 7. GL 状态
   // ----------------------------------------------------------------
@@ -414,6 +416,8 @@ void ForestScene::render(GLFWwindow *window) {
   }
   // 恢复 Cull Mode
   bonobo::changeCullMode(_cullMode);
+	
+  renderSkybox(_camera.GetWorldToViewMatrix(), _camera.GetViewToClipMatrix());
 
   // 3. ImGui
   glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -435,7 +439,7 @@ void ForestScene::render(GLFWwindow *window) {
 
     // 手动时间滑条
     if (ImGui::SliderFloat("Time of Day", &_sunTime, 0.0f, 6.28f)) {
-	     _isPaused = true; 
+	     _isPaused = true;
     }
      ImGui::Text("Time: %.2f", _elapsedTimeS);
   }
@@ -444,4 +448,96 @@ void ForestScene::render(GLFWwindow *window) {
 	ImGui::End();
 
   _windowManager.RenderImGuiFrame(_showGui);
+}
+
+void ForestScene::initSkybox() {
+	// 1. 加载 Shader
+	_programManager.CreateAndRegisterProgram(
+		"Skybox",
+		{{ShaderType::vertex, "skybox.vert"},
+		 {ShaderType::fragment, "skybox.frag"}},
+		_skyboxShader);
+
+	// 2. 创建一个简单的立方体 (只需要位置，-1 到 1)
+	float skyboxVertices[] = {
+		// positions
+		-1.0f,  1.0f, -1.0f,
+		-1.0f, -1.0f, -1.0f,
+		 1.0f, -1.0f, -1.0f,
+		 1.0f, -1.0f, -1.0f,
+		 1.0f,  1.0f, -1.0f,
+		-1.0f,  1.0f, -1.0f,
+
+		-1.0f, -1.0f,  1.0f,
+		-1.0f, -1.0f, -1.0f,
+		-1.0f,  1.0f, -1.0f,
+		-1.0f,  1.0f, -1.0f,
+		-1.0f,  1.0f,  1.0f,
+		-1.0f, -1.0f,  1.0f,
+
+		 1.0f, -1.0f, -1.0f,
+		 1.0f, -1.0f,  1.0f,
+		 1.0f,  1.0f,  1.0f,
+		 1.0f,  1.0f,  1.0f,
+		 1.0f,  1.0f, -1.0f,
+		 1.0f, -1.0f, -1.0f,
+
+		-1.0f, -1.0f,  1.0f,
+		-1.0f,  1.0f,  1.0f,
+		 1.0f,  1.0f,  1.0f,
+		 1.0f,  1.0f,  1.0f,
+		 1.0f, -1.0f,  1.0f,
+		-1.0f, -1.0f,  1.0f,
+
+		-1.0f,  1.0f, -1.0f,
+		 1.0f,  1.0f, -1.0f,
+		 1.0f,  1.0f,  1.0f,
+		 1.0f,  1.0f,  1.0f,
+		-1.0f,  1.0f,  1.0f,
+		-1.0f,  1.0f, -1.0f,
+
+		-1.0f, -1.0f, -1.0f,
+		-1.0f, -1.0f,  1.0f,
+		 1.0f, -1.0f, -1.0f,
+		 1.0f, -1.0f, -1.0f,
+		-1.0f, -1.0f,  1.0f,
+		 1.0f, -1.0f,  1.0f
+	};
+
+	glGenVertexArrays(1, &_skyboxVAO);
+	glGenBuffers(1, &_skyboxVBO);
+	glBindVertexArray(_skyboxVAO);
+	glBindBuffer(GL_ARRAY_BUFFER, _skyboxVBO);
+	glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
+	
+	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+}
+
+void ForestScene::renderSkybox(glm::mat4 const& view, glm::mat4 const& projection) {
+	// 1. 深度测试技巧：LEQUAL
+	// 因为 shader 里我们把 z 设为了 w (即深度1.0)，默认的 LESS 会剔除它
+	// 所以要改成 LEQUAL (小于等于)
+	glDepthFunc(GL_LEQUAL);
+	glDisable(GL_CULL_FACE);
+	glUseProgram(_skyboxShader);
+
+	// 2. 去掉 View 矩阵的平移部分
+	glm::mat4 viewNoTrans = glm::mat4(glm::mat3(view));
+	glm::mat4 viewProj = projection * viewNoTrans;
+
+	glUniformMatrix4fv(glGetUniformLocation(_skyboxShader, "vertex_world_to_clip"),
+					   1, GL_FALSE, glm::value_ptr(viewProj));
+	
+	// 3. 传入太阳位置 (必须和渲染树木的一样)
+	glUniform3fv(glGetUniformLocation(_skyboxShader, "light_position"),
+				 1, glm::value_ptr(_lightPosition));
+
+	// 4. 绘制
+	glBindVertexArray(_skyboxVAO);
+	glDrawArrays(GL_TRIANGLES, 0, 36);
+	glBindVertexArray(0);
+	glEnable(GL_CULL_FACE);
+	// 5. 恢复深度规则
+	glDepthFunc(GL_LESS);
 }

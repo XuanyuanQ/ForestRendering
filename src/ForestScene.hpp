@@ -84,4 +84,10 @@ private:
 	bool _isPaused;     // 暂停开关
 	float _sunTime;     // 太阳的专属时间
 	float _daySpeed;    // 太阳移动速度
+	
+	GLuint _skyboxVAO;
+	GLuint _skyboxVBO;
+	GLuint _skyboxShader;
+	void initSkybox(); // 初始化函数
+	void renderSkybox(glm::mat4 const& view, glm::mat4 const& projection); // 渲染函数
 };
