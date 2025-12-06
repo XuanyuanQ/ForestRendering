@@ -23,49 +23,104 @@ mat3 TBN;
 out vec4 frag_color;
 
 void main() {
-
+	// 1. 准备变量
 	vec3 N;
-	vec3 normalMapValue;
-	if (is_leaves != 0) {
-		  // --- 叶子 ---
-		normalMapValue = texture(maple_leaf_normal, fs_in.texcoord).rgb;
-		  
-	  } else {
-		  // --- 树干 ---
-		normalMapValue = texture(maple_bark_normal, fs_in.texcoord).rgb;
-	  }
-	
-	normalMapValue = normalMapValue * 2.0 - 1.0; // [0,1] -> [-1,1]
-	N = normalize(fs_in.TBN * normalMapValue);   // 转到世界空间
-	
-	float kd = max(0.0, dot(normalize(fs_in.fL), N));
-	vec3 R = reflect(normalize(-fs_in.fL), N);
-	float ks = max(0.0, pow(dot(normalize(fs_in.fV), normalize(R)), 50.0));
-	if (has_diffuse_texture != 0) {
-		if (is_leaves != 0) {
-		  vec4 leavesMask = texture(leaves_alpha, fs_in.texcoord);
-		  if (leavesMask == vec4(1.0)) {
-			discard;
-		  } else {
-			frag_color =
-				(kd + ks) * vec4(texture(diffuse_texture, fs_in.texcoord).rgb, 1.0);
-		  }
-		} else {
-		    frag_color = (kd + ks) * texture(diffuse_texture, fs_in.texcoord);
-		}
+	vec4 albedoTexture;
+	float shininess;
+	float specularStrength;
 
-	} else {
-		if (is_leaves != 0) {
-		  vec4 leavesMask = texture(leaves_alpha, fs_in.texcoord);
-		  if (leavesMask != vec4(1.0)) {
-			discard;
-		  } else {
-			frag_color = (kd)*vec4(texture(maple_leaf, fs_in.texcoord).rgb, 1.0);
-		  }
-		} else {
-		    frag_color = (kd)*texture(maple_bark, fs_in.texcoord);
-		}
-	// frag_color = vec4(1.0);
+	if (is_leaves != 0) {
+		// === 树叶逻辑 (保持不变) ===
+		float mask = texture(leaves_alpha, fs_in.texcoord).r;
+		if (mask < 0.5) discard;
+
+		albedoTexture = texture(maple_leaf, fs_in.texcoord);
+		vec3 rawNormal = texture(maple_leaf_normal, fs_in.texcoord).rgb;
+		rawNormal = rawNormal * 2.0 - 1.0;
+		rawNormal.xy *= 0.5;
+		N = normalize(fs_in.TBN * rawNormal);
+
+		shininess = 30.0;
+		specularStrength = 0.3;
 	}
-	// frag_color = (kd + ks) * texture(diffuse_texture, fs_in.texcoord);
+	else {
+		// === 树干逻辑 (🔴 调整亮度) ===
+				
+		vec2 trunkUV = fs_in.texcoord * vec2(1.0, 1.0);
+		albedoTexture = texture(maple_bark, trunkUV);
+		
+		// 🔴 修改 1：提亮染色剂
+		// 之前的 (0.6, 0.45, 0.3) 太暗了。我们改成更亮的暖褐色。
+		vec3 woodTint = vec3(1.0, 0.8, 0.6);
+		albedoTexture.rgb *= woodTint;
+		
+		// 🔴 修改 2：删除这行压暗的代码！
+		// albedoTexture.rgb *= 0.6; // <--- 删掉这行，或者改成 *= 1.2 提亮
+
+		// 法线采样 (保持不变)
+		vec3 rawNormal = texture(maple_bark_normal, trunkUV).rgb;
+		rawNormal = rawNormal * 2.0 - 1.0;
+		rawNormal.xy *= 1.2;
+		N = normalize(fs_in.TBN * rawNormal);
+
+		shininess = 5.0;
+		specularStrength = 0.02;
+	}
+
+	// 2. 光照计算
+	vec3 V = normalize(fs_in.fV);
+	vec3 L = normalize(fs_in.fL);
+	vec3 R = reflect(-L, N);
+
+	// 1. 获取太阳高度 (0.0是地平线，1.0是头顶)
+	// 我们用 L.y (光照向量的垂直分量) 来判断
+	float sunHeight = L.y;
+
+	// 2. 定义不同时刻的阳光颜色 (Light Color)
+	vec3 noonSun    = vec3(1.0, 0.98, 0.9);  // 中午：暖白
+	vec3 sunsetSun  = vec3(1.0, 0.4, 0.1);   // 日落：橘红
+	vec3 nightSun   = vec3(0.0, 0.0, 0.0);   // 晚上：无光
+
+	// 3. 定义不同时刻的环境光颜色 (Ambient Color)
+	vec3 noonAmb    = vec3(0.4, 0.4, 0.45);  // 中午环境：亮蓝灰
+	vec3 sunsetAmb  = vec3(0.3, 0.2, 0.2);   // 日落环境：暗红褐
+	vec3 nightAmb   = vec3(0.02, 0.02, 0.05);// 晚上环境：深蓝黑
+
+	// 4. 根据高度混合颜色
+	vec3 sunColor;
+	vec3 skyAmbient;
+
+	if (sunHeight > 0.2) {
+		// 白天 -> 中午 (混合 日落色 和 中午色)
+		float t = (sunHeight - 0.2) / 0.8;
+		sunColor = mix(sunsetSun, noonSun, t);
+		skyAmbient = mix(sunsetAmb, noonAmb, t);
+	} else if (sunHeight > -0.1) {
+		// 日落 -> 晚上 (混合 晚上色 和 日落色)
+		float t = (sunHeight + 0.1) / 0.3;
+		sunColor = mix(nightSun, sunsetSun, t);
+		skyAmbient = mix(nightAmb, sunsetAmb, t);
+	} else {
+		// 纯晚上
+		sunColor = nightSun;
+		skyAmbient = nightAmb;
+	}
+
+	// -------------------------------------------------------------
+	// 5. 应用光照 (使用动态计算出的 sunColor 和 skyAmbient)
+	// -------------------------------------------------------------
+
+	// 环境光 = 动态环境色 * 材质固有色
+	vec3 ambient = skyAmbient * albedoTexture.rgb;
+
+	// 漫反射 = 漫反射强度 * 动态阳光色 * 材质固有色
+	float diff = max(dot(L, N), 0.0);
+	vec3 diffuse = diff * sunColor * albedoTexture.rgb;
+
+	// 高光 = 高光强度 * 动态阳光色
+	float spec = pow(max(dot(V, R), 0.0), shininess);
+	vec3 specular = spec * specularStrength * sunColor;
+
+	// 输出
+	frag_color = vec4(ambient + diffuse + specular, 1.0);
 }

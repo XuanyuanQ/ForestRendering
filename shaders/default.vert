@@ -44,7 +44,8 @@ void main() {
 
 	vs_out.normal = vec3(normal_model_to_world * vec4(normal, 0.0));
 	vs_out.fV = camera_position - vec3(model_to_world * vec4(vertex, 1.0));
-	vs_out.fL = light_position - vec3(model_to_world * vec4(vertex, 1.0));
+	// add 模拟太阳光：光照方向 = 光源本身的方向向量
+	vs_out.fL = light_position;
 	gl_Position = vertex_world_to_clip * model_to_world * vec4(vertex, 1.0);
 }
 

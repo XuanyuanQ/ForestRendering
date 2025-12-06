@@ -11,8 +11,12 @@ ForestScene::ForestScene(WindowManager &windowManager)
     : _windowManager(windowManager),
       _camera(0.5f * glm::half_pi<float>(),
               static_cast<float>(config::resolution_x) /
-                  static_cast<float>(config::resolution_y),
-              0.01f, 1000.0f) {
+			  static_cast<float>(config::resolution_y),
+              0.01f, 1000.0f),
+	  _isPaused(false),   // 默认自动播放
+	  _sunTime(0.0f),     // 从 0 开始
+	  _daySpeed(0.5f)     // 默认速度
+{
   _camera.mWorld.SetTranslate(glm::vec3(0.0f, 10.0f, 20.0f));
   _camera.mMouseSensitivity = glm::vec2(0.003f);
   _camera.mMovementSpeed = glm::vec3(3.0f);
@@ -327,12 +331,27 @@ bool ForestScene::setup() {
 }
 
 void ForestScene::update(double deltaTimeUs) {
-  _inputHandler.Advance();
-  _camera.Update(std::chrono::microseconds((long)deltaTimeUs), _inputHandler);
-  _elapsedTimeS += (float)(deltaTimeUs / 1000000.0);
-
-  if (_inputHandler.GetKeycodeState(GLFW_KEY_F2) & JUST_RELEASED)
-    _showGui = !_showGui;
+	_inputHandler.Advance();
+	_camera.Update(std::chrono::microseconds((long)deltaTimeUs), _inputHandler);
+	_elapsedTimeS += (float)(deltaTimeUs / 1000000.0);
+	
+	if (!_isPaused) {
+		float dt = (float)(deltaTimeUs / 1000000.0);
+		_sunTime += dt * _daySpeed;
+	}
+	// 新增 模拟太阳轨道
+	float daySpeed = 0.5f; // 控制时间流逝速度
+	float sunRadius = 100.0f; // 太阳距离 (对于方向光，这个值只影响方向，不影响衰减)
+	
+	// 利用 sin/cos 让太阳绕 Z 轴旋转 (模拟东升西落)
+	// 假设太阳从 X 正方向(东)升起，到 Y 正方向(正午)，落向 X 负方向(西)
+	// timeOffset 用来调整初始时间，让程序一开始是白天
+	_lightPosition.x = sin(_sunTime) * sunRadius; // 东西移动
+	_lightPosition.y = cos(_sunTime) * sunRadius; // 上下移动
+	_lightPosition.z = 10.0f; //稍微偏南或偏北一点，产生好看的阴影角度
+	
+	if (_inputHandler.GetKeycodeState(GLFW_KEY_F2) & JUST_RELEASED)
+	_showGui = !_showGui;
 }
 
 void ForestScene::render(GLFWwindow *window) {
@@ -404,9 +423,25 @@ void ForestScene::render(GLFWwindow *window) {
       bonobo::changeCullMode(_cullMode);
     }
     bonobo::uiSelectPolygonMode("Polygon mode", _polygonMode);
-    ImGui::Text("Time: %.2f", _elapsedTimeS);
+	  
+    ImGui::Separator(); // 画一条分割线
+    ImGui::Text("Sun Control");
+
+    // 暂停复选框
+    ImGui::Checkbox("Pause Sun", &_isPaused);
+
+    // 速度滑条控制太阳走得快还是慢
+    ImGui::SliderFloat("Speed", &_daySpeed, 0.0f, 2.0f);
+
+    // 手动时间滑条
+    if (ImGui::SliderFloat("Time of Day", &_sunTime, 0.0f, 6.28f)) {
+	     _isPaused = true; 
+    }
+     ImGui::Text("Time: %.2f", _elapsedTimeS);
   }
-  ImGui::End();
+  
+	
+	ImGui::End();
 
   _windowManager.RenderImGuiFrame(_showGui);
 }
