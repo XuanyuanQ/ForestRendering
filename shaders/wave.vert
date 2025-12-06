@@ -24,7 +24,12 @@ uniform mat4 vertex_world_to_clip;
 // same structure as in (for input), with matching name for the structure
 // members and matching structure type. Have a look at
 // shaders/EDAF80/diffuse.frag.
-out VS_OUT { vec2 texcoord; }
+out VS_OUT {
+	vec3 normal;
+	vec2 texcoord;
+	vec3 fV;
+	vec3 fL;
+} vs_out;
 vs_out;
 
 uniform vec3 light_position;
@@ -46,12 +51,34 @@ float derivativeMain(float time, float A, float f, float p, float k, vec2 D,
 
 void main() {
 
-  vec3 point = vertex;
-  float time = 1.0;
-  float wave1 = waveFun(time, 1.0, 0.2, 0.5, 2.0, vec2(-1.0, 0.0), point);
-  float wave2 = waveFun(time, 0.5, 0.4, 1.3, 2.0, vec2(-0.7, 0.7), point);
+	// 1. 计算原始世界坐标
+	vec4 worldPos = vertex_model_to_world * vec4(vertex, 1.0);
 
-  vs_out.texcoord = texcoord.xy;
-  gl_Position = vertex_world_to_clip * vertex_model_to_world *
-                vec4(vec3(point.x, 1.0 * (wave1 + wave2), point.z), 1.0);
+	// 2. 计算地形起伏 (Wave Displacement)
+	float time = 1.0;
+	
+	// 计算两个波形叠加
+	float wave1 = waveFun(time, 1.0, 0.2, 0.5, 2.0, vec2(-1.0, 0.0), vertex);
+	float wave2 = waveFun(time, 0.5, 0.4, 1.3, 2.0, vec2(-0.7, 0.7), vertex);
+	
+	// 应用高度偏移
+	// 注意：这里修改的是 worldPos.y，这样不仅位置变了，后续的光照计算也会基于这个新高度
+	float heightOffset = 1.0 * (wave1 + wave2);
+	worldPos.y += heightOffset;
+
+	// 3. 处理法线
+	mat3 normalMatrix = transpose(inverse(mat3(vertex_model_to_world)));
+	vs_out.normal = normalize(normalMatrix * normal);
+
+	// 4. 传递 UV
+	vs_out.texcoord = texcoord.xy;
+
+	// 5. 计算观察向量 (基于起伏后的 worldPos)
+	vs_out.fV = camera_position - vec3(worldPos);
+
+	// 光照向量 (阳光是平行的，直接传方向)
+	vs_out.fL = light_position;
+
+	// 6. 最终屏幕位置
+	gl_Position = vertex_world_to_clip * worldPos;
 }
