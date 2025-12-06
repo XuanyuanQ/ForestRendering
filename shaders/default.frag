@@ -44,19 +44,15 @@ void main() {
 		specularStrength = 0.3;
 	}
 	else {
-		// === 树干逻辑 (🔴 调整亮度) ===
+		// === 树干逻辑  ===
 				
 		vec2 trunkUV = fs_in.texcoord * vec2(1.0, 1.0);
 		albedoTexture = texture(maple_bark, trunkUV);
 		
-		// 🔴 修改 1：提亮染色剂
-		// 之前的 (0.6, 0.45, 0.3) 太暗了。我们改成更亮的暖褐色。
+		// 提亮染色剂
 		vec3 woodTint = vec3(1.0, 0.8, 0.6);
 		albedoTexture.rgb *= woodTint;
 		
-		// 🔴 修改 2：删除这行压暗的代码！
-		// albedoTexture.rgb *= 0.6; // <--- 删掉这行，或者改成 *= 1.2 提亮
-
 		// 法线采样 (保持不变)
 		vec3 rawNormal = texture(maple_bark_normal, trunkUV).rgb;
 		rawNormal = rawNormal * 2.0 - 1.0;
