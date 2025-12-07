@@ -13,7 +13,7 @@ ForestScene::ForestScene(WindowManager &windowManager)
               static_cast<float>(config::resolution_x) /
                   static_cast<float>(config::resolution_y),
               0.01f, 1000.0f),
-      _isPaused(false), // 默认自动播放
+	  _isPaused(false), // 默认自动播放
       _sunTime(0.0f),   // 从 0 开始
       _daySpeed(0.5f)   // 默认速度
 {
@@ -865,7 +865,7 @@ void ForestScene::update(double deltaTimeUs) {
 
   if (!_isPaused) {
     float dt = (float)(deltaTimeUs / 1000000.0);
-    // _sunTime += dt * _daySpeed;
+     _sunTime += dt * _daySpeed;
   }
   // 新增 模拟太阳轨道
   float daySpeed = 0.5f; // 控制时间流逝速度
@@ -891,8 +891,11 @@ void ForestScene::render(GLFWwindow *window) {
 
   _windowManager.NewImGuiFrame();
   glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
-  bonobo::changePolygonMode(_polygonMode);
 
+	
+  renderSkybox(_camera.GetWorldToViewMatrix(), _camera.GetViewToClipMatrix());
+	
+  bonobo::changePolygonMode(_polygonMode);
   // 1. 渲染地面
   // Node::render 通常接受 (VP矩阵, Model矩阵)
   {
@@ -933,7 +936,6 @@ void ForestScene::render(GLFWwindow *window) {
   // 恢复 Cull Mode
   bonobo::changeCullMode(_cullMode);
 
-  renderSkybox(_camera.GetWorldToViewMatrix(), _camera.GetViewToClipMatrix());
 
   // 3. ImGui
   glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
@@ -1006,14 +1008,17 @@ void ForestScene::initSkybox() {
   glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
 }
 
-void ForestScene::renderSkybox(glm::mat4 const &view,
-                               glm::mat4 const &projection) {
-  // 1. 深度测试技巧：LEQUAL
-  // 因为 shader 里我们把 z 设为了 w (即深度1.0)，默认的 LESS 会剔除它
-  // 所以要改成 LEQUAL (小于等于)
-  glDepthFunc(GL_LEQUAL);
-  glDisable(GL_CULL_FACE);
-  glUseProgram(_skyboxShader);
+
+void ForestScene::renderSkybox(glm::mat4 const& view, glm::mat4 const& projection) {
+	//关闭深度测试和深度写入
+	glDisable(GL_DEPTH_TEST);
+	glDepthMask(GL_FALSE);
+		
+	// 关闭剔除
+	glDisable(GL_CULL_FACE);
+	
+	glUseProgram(_skyboxShader);
+
 
   // 2. 去掉 View 矩阵的平移部分
   glm::mat4 viewNoTrans = glm::mat4(glm::mat3(view));
@@ -1023,15 +1028,22 @@ void ForestScene::renderSkybox(glm::mat4 const &view,
       glGetUniformLocation(_skyboxShader, "vertex_world_to_clip"), 1, GL_FALSE,
       glm::value_ptr(viewProj));
 
+
   // 3. 传入太阳位置 (必须和渲染树木的一样)
   glUniform3fv(glGetUniformLocation(_skyboxShader, "light_position"), 1,
                glm::value_ptr(_lightPosition));
 
-  // 4. 绘制
-  glBindVertexArray(_skyboxVAO);
-  glDrawArrays(GL_TRIANGLES, 0, 36);
-  glBindVertexArray(0);
-  glEnable(GL_CULL_FACE);
-  // 5. 恢复深度规则
-  glDepthFunc(GL_LESS);
+
+	// 4. 绘制
+	glBindVertexArray(_skyboxVAO);
+	glDrawArrays(GL_TRIANGLES, 0, 36);
+	glBindVertexArray(0);
+	glEnable(GL_CULL_FACE);
+	
+	// 5. 恢复状态
+	glEnable(GL_CULL_FACE);
+	glEnable(GL_DEPTH_TEST); // 重新开启深度测试
+	glDepthMask(GL_TRUE);    // 重新开启深度写入
+	glDepthFunc(GL_LESS);    // 恢复默认规则
+
 }

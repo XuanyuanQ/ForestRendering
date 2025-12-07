@@ -12,7 +12,7 @@ void main() {
 	vec3 L = normalize(light_position);
 
 	// -----------------------------------------------------------
-	// 2. 背景渐变色 (复用你的昼夜逻辑)
+	// 2. 背景渐变色
 	// -----------------------------------------------------------
 	float sunHeight = L.y;
 	
@@ -44,23 +44,12 @@ void main() {
 	}
 
 	// 计算当前像素的仰角 (0=地平线, 1=头顶)
-	// 使用 V.y 来做简单的垂直渐变
+	// 使用 V.y 做垂直渐变
 	float gradient = clamp(V.y, 0.0, 1.0);
 	// 加上 pow 让地平线雾气感更强
 	gradient = pow(gradient, 0.5);
 
-	vec3 skyColor;
-	if (V.y > 0.0) {
-		// [上半球]
-		// 加 max(..., 0.0) 保护，防止负数导致的闪烁
-		float gradient = pow(max(V.y, 0.0), 0.5);
-		skyColor = mix(skyHoriz, skyTop, gradient);
-	} else {
-		// [下半球]
-		float gradient = -V.y;
-		vec3 groundBottom = vec3(0.05, 0.05, 0.05);
-		skyColor = mix(skyHoriz, groundBottom, gradient);
-	}
+	vec3 skyColor = mix(skyHoriz, skyTop, gradient);
 
 	// -----------------------------------------------------------
 	// 3. 画太阳 (Sun Disk)
