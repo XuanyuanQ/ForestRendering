@@ -12,7 +12,7 @@
 #include "core/WindowManager.hpp"
 #include "core/node.hpp"
 #define SHADOW_WIDTH 1920
-#define SHADOW_HEIGHT 1080
+#define SHADOW_HEIGHT 1920
 class ForestScene {
 public:
   ForestScene(WindowManager &windowManager);
@@ -31,11 +31,13 @@ private:
                                                 int Depth = 100);
 
   GLuint createQuadsForPatch();
-  void createLight();
+  void rendtest(GLuint shaderProgram);
+  void simulationSun(GLuint shaderProgram);
+  void simulationForest(GLuint shaderProgram);
   void initShadowMap();
   void initGbuffer();
   void initLightContribution();
-  void initLightMatrix();
+  void updateLightMatrix(const glm::vec3 light_pos);
   void renderShadowMap();
   void renderGbuffer();
   void renderLightContribution();
@@ -61,6 +63,9 @@ private:
   GLuint _gBufferShader;
   GLuint _lightContributionShader;
   GLuint _resolve_deferred_shader;
+
+  GLuint _sunTestShader;
+  GLuint _forestTestShader;
 
   // --- 纹理 ---
   GLuint _texBark;
@@ -102,9 +107,6 @@ private:
   GLuint _grass_tex;
   GLuint _floor_tex;
 
-  GLuint _terrainVao;
-  GLuint _terrainVbo;
-
   GLuint _skyboxVAO;
   GLuint _skyboxVBO;
   GLuint _skyboxShader;
@@ -112,6 +114,10 @@ private:
   bool _isPaused;  // 暂停开关
   float _sunTime;  // 太阳的专属时间
   float _daySpeed; // 太阳移动速度
+  bool _applyShadow;
+  float lightX{3.0f};
+  float lightY{14.0f};
+  float lightZ{11.0f};
 
   // shadow
   GLuint shadowFBO;
@@ -136,4 +142,10 @@ private:
   GLuint lboDepth;
 
   GLuint fullScreenVAO;
+
+  // test
+  unsigned int cubeVAO = 0;
+  unsigned int cubeVBO = 0;
+  GLuint _terrainVao;
+  GLuint _terrainVbo;
 };

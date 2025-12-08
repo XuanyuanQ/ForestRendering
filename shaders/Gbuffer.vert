@@ -38,12 +38,25 @@ out VS_OUT {
 }
 vs_out;
 
+float waveFun(float time, float A, float f, float p, float k, vec2 D,
+              vec3 point) {
+  float a = sin((D.x * point.x + (D.y) * point.z) * f + time * p) * 0.5 + 0.5;
+  return A * pow(a, k);
+}
+
+float derivativeMain(float time, float A, float f, float p, float k, vec2 D,
+                     vec3 point) {
+  float wave = waveFun(time, A, f, p, max(0, k - 1.0), D, point);
+  return 0.5 * k * f * wave *
+         cos((D.x * point.x + (D.y) * point.z) * f + time * p);
+}
+
 void main() {
   vs_out.texcoord = texcoord.xy;
 
   mat4 model_to_world;
   // vs_out.normal_model_to_world = transpose(inverse(model_to_world));
-
+  vec3 world_pos;
   if (lables == 0) {
     model_to_world = vertex_model_to_world;
   } else {
@@ -54,7 +67,10 @@ void main() {
   vs_out.normal_model_to_world = transpose(inverse(model_to_world));
   float scale = 1.0;
   if (lables == 3) {
-    scale = 0.02;
+    scale = 0.015;
+  }
+  if (lables == 1 || lables == 2) {
+    scale = 0.4;
   }
   vs_out.normal = vec3(vs_out.normal_model_to_world * vec4(normal, 0.0));
   // --- 计算 TBN  ---
@@ -65,14 +81,27 @@ void main() {
   vs_out.TBN = mat3(T, B, N);
   vs_out.ndc = vertex_view_to_projection * vertex_world_to_view *
                model_to_world * vec4(vertex * scale, 1.0);
-  vs_out.world_pos = vec3(model_to_world * vec4(vertex * scale, 1.0));
-  vs_out.FragPosLightSpace =
-      light_world_to_clip_matrix * (model_to_world * vec4(vertex * scale, 1.0));
-  vs_out.fV =
-      camera_position - vec3(model_to_world * vec4(vertex * scale, 1.0));
+
+  float time = 1.0;
+  // 计算两个波形叠加
+  float wave1 = waveFun(time, 1.0, 0.2, 0.5, 2.0, vec2(-1.0, 0.0), vertex);
+  float wave2 = waveFun(time, 0.5, 0.4, 1.3, 2.0, vec2(-0.7, 0.7), vertex);
+
+  // 应用高度偏移
+  // 注意：这里修改的是
+  // worldPos.y，这样不仅位置变了，后续的光照计算也会基于这个新高度
+  float heightOffset = 1.0 * (wave1 + wave2);
+  world_pos = vec3(model_to_world * vec4(vertex * scale, 1.0));
+  world_pos.y += heightOffset;
+  // if (lables == 0) {
+
+  // }
+  vs_out.world_pos = world_pos;
+  vs_out.FragPosLightSpace = light_world_to_clip_matrix * vec4(world_pos, 1.0);
+  vs_out.fV = camera_position - world_pos;
   // add 模拟太阳光：光照方向 = 光源本身的方向向量
   vs_out.fL = light_position;
 
-  gl_Position = vertex_view_to_projection * vertex_world_to_view *
-                model_to_world * vec4(vertex * scale, 1.0);
+  gl_Position =
+      vertex_view_to_projection * vertex_world_to_view * vec4(world_pos, 1.0);
 }

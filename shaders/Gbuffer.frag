@@ -5,6 +5,7 @@ uniform sampler2D normals_texture;
 uniform sampler2D shadow_texture;
 
 uniform int lables; // 0-terrain,1-leaves,2-bark,3-grass
+uniform int isApplyShadow;
 uniform mat4 light_world_to_clip_matrix;
 
 // 摄像机位置
@@ -82,6 +83,10 @@ void calculateGrass(in vec4 albedoTexture, in vec3 L, in vec3 V, in vec3 N,
   // 高光
   float spec = pow(max(dot(V, R), 0.0), 10.0);
   specular = spec * sunColor * 0.1; // 强度很低
+
+  ambient = ambient * 0.4;
+  diffuse = diffuse * 0.3;
+  specular = vec3(0.0, 0.38, 0.0) * 0.1; // 暂时规避加上specular无阴影
 }
 
 // --------------------------------------
@@ -194,49 +199,63 @@ void calculateTerrain(in vec4 albedoTexture, in vec3 L, in vec3 V, in vec3 N,
   // B. 漫反射
   // 混合：漫反射强度 * 阳光颜色 * 地面纹理颜色
   float diff = max(dot(L, N), 0.0);
-  diffuse = diff * sunColor * albedoTexture.rgb;
+  diffuse = diff * sunColor * albedoTexture.rgb * 0.3;
 
   // C. 高光
-  float spec = pow(max(dot(V, R), 0.0), 5.0); // shininess 设为 5.0
-  specular = spec * sunColor * 0.1;           // 强度设为 0.1
+  float spec = pow(max(dot(V, R), 0.0), 50.0); // shininess 设为 5.0
+  specular = spec * sunColor * 0.1;            // 强度设为 0.1
+  ambient = ambient * 0.4;
+  diffuse = diffuse * 0.3;
+  specular = vec3(0.5, 0.38, 0.2) * 0.1; // 暂时规避加上specular无阴影
 }
 
 float calculateLight(vec3 world_pos, mat4 light_projection,
                      vec2 shadowmap_texel_size) {
-  //   float light_intensity = 20.0 * 100.0 * 100.0;
-  //   float light_angle_falloff = radians(37.0);
-
-  //   vec2 texcoord = gl_FragCoord.xy * inverse_screen_resolution;
-
-  //   float distance_falloff = 1.0 / max(0.0001, length(L) * length(L));
-
-  //   float cosTheta = dot(normalize(light_direction), -normalize(L));
-  //   float cutoff = cos(radians(40.0));
-  //   float angle_falloff = pow(smoothstep(cutoff, 1.0, cosTheta), 2.0);
-
-  // Shadow mapping PCF
   vec4 clip_pos = light_projection * vec4(world_pos, 1.0);
-  vec4 ndc_pos = clip_pos / clip_pos.w;
-  vec2 light_uv = ndc_pos.xy * 0.5 + 0.5;
-  float current_depth = clamp(-1.0, 1.0, ndc_pos.r);
 
-  float light_d = 0.0;
+  // 1. 计算 NDC 坐标
+  vec3 projCoords = clip_pos.xyz / clip_pos.w;
+
+  // 2. 变换到 [0, 1] 区间 (用于纹理采样和深度比较)
+  // 这一步把 [-1, 1] 的 NDC 深度变成了 [0, 1] 的深度
+  projCoords = projCoords * 0.5 + 0.5;
+
+  // 3. 解决超出视锥体的边界问题
+  if (projCoords.z > 1.0)
+    return 1.0;
+
+  float current_depth = projCoords.z;
+
+  // 4. 计算 Bias (根据你的场景调整，0.005 对于正交投影通常是安全的)
+  float bias = 0.005;
+
+  float shadow_sum = 0.0;
+
+  // PCF 5x5 采样
   for (int i = -2; i <= 2; ++i) {
     for (int j = -2; j <= 2; ++j) {
-      vec2 offset = vec2(i, j) * shadowmap_texel_size;
-      float d = texture(shadow_texture, light_uv + offset).r;
+      // 采样 ShadowMap (值在 0.0 到 1.0 之间)
+      float closest_depth =
+          texture(shadow_texture,
+                  projCoords.xy + vec2(i, j) * shadowmap_texel_size)
+              .r;
 
-      if (clamp(0.0, 1.0, d) * 2.0 - 1.0 + 0.005 > current_depth)
-        light_d += 1.0;
+      // 比较逻辑：
+      // 如果 "当前深度 - bias" > "最近深度"，说明我在后面 -> 阴影 (1.0)
+      // 否则 -> 亮部 (0.0)
+      if (current_depth - bias > closest_depth)
+        shadow_sum += 1.0;
     }
   }
-  float lightpcf = light_d / 15.0;
-  //   float d = texture(shadow_texture, light_uv).r;
-  //   float lightpcf = 1.0;
-  //   if (clamp(0.0, 1.0, d) * 2.0 - 1.0 < current_depth - 0.005) {
-  //     lightpcf = 0.0;
-  //   }
-  return lightpcf;
+
+  //   计算平均阴影值
+  //   shadow_sum 是有多少个点说我是阴影 如果 25 个点都说阴影，shadow_factor =
+  //   1.0
+  float shadow_factor = shadow_sum / 25.0;
+  return 1.0 - shadow_factor;
+  //   shadow_sum = texture(shadow_texture, projCoords.xy).r;
+  // 返回光照强度 (1.0 - 阴影)
+  //   return shadow_sum;
 }
 
 void main() {
@@ -313,8 +332,12 @@ void main() {
     calculateTerrain(albedoTexture, L, V, finalNormal, ambient, diffuse,
                      specular);
   }
-
-  //   light_pcf = 1.0;
+  if (0 == isApplyShadow) {
+    light_pcf = 1.0;
+  }
+  //
   frag_color = vec4((light_pcf * (diffuse + specular) + ambient), 1.0);
   //   frag_color = vec4(vec3(light_pcf), 1.0);
+  //   float shadow_sum = texture(shadow_texture, vec2(0.5, 0.5)).r;
+  //   frag_color = vec4(vec3(shadow_sum), 1.0);
 }

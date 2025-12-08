@@ -1,58 +1,68 @@
-#include <cstdlib>
-#include <chrono>
+#include "ForestScene.hpp" // 引入类
 #include "config.hpp"
 #include "core/Bonobo.h"
 #include "core/WindowManager.hpp"
-#include "ForestScene.hpp" // 引入类
+#include <chrono>
+#include <cstdlib>
 
 using namespace std::literals::chrono_literals;
 
 int main() {
-	Bonobo framework;
-	WindowManager& window_manager = framework.GetWindowManager();
+  Bonobo framework;
+  WindowManager &window_manager = framework.GetWindowManager();
 
-	// 创建场景对象
-	ForestScene scene(window_manager);
+  // 创建场景对象
+  ForestScene scene(window_manager);
 
-	// 创建窗口
-	WindowManager::WindowDatum window_datum{
-		scene.getInputHandler(),
-		scene.getCamera(),
-		config::resolution_x, config::resolution_y, 0, 0, 0, 0
-	};
-	
-	GLFWwindow* window = window_manager.CreateGLFWWindow("Forest Scene", window_datum, config::msaa_rate);
-	if (window == nullptr) {
-		LogError("Failed to get a window");
-		return EXIT_FAILURE;
-	}
+  // 创建窗口
+  WindowManager::WindowDatum window_datum{scene.getInputHandler(),
+                                          scene.getCamera(),
+                                          config::resolution_x,
+                                          config::resolution_y,
+                                          0,
+                                          0,
+                                          0,
+                                          0};
 
-	bonobo::init();
+  GLFWwindow *window = window_manager.CreateGLFWWindow(
+      "Forest Scene", window_datum, config::msaa_rate);
+  if (window == nullptr) {
+    LogError("Failed to get a window");
+    return EXIT_FAILURE;
+  }
 
-	// 场景初始化
-	if (!scene.setup()) {
-		return EXIT_FAILURE;
-	}
+  bonobo::init();
 
-	auto last_time = std::chrono::high_resolution_clock::now();
+  // 场景初始化
+  if (!scene.setup()) {
+    return EXIT_FAILURE;
+  }
 
-	while (!glfwWindowShouldClose(window)) {
-		auto const now_time = std::chrono::high_resolution_clock::now();
-		auto const delta_time_us = std::chrono::duration_cast<std::chrono::microseconds>(now_time - last_time);
-		last_time = now_time;
+  auto last_time = std::chrono::high_resolution_clock::now();
 
-		glfwPollEvents();
-		
-		if (scene.getInputHandler().GetKeycodeState(GLFW_KEY_ESCAPE) & JUST_PRESSED) {
-			glfwSetWindowShouldClose(window, GL_TRUE);
-		}
+  while (!glfwWindowShouldClose(window)) {
+    auto const now_time = std::chrono::high_resolution_clock::now();
+    auto const delta_time_us =
+        std::chrono::duration_cast<std::chrono::microseconds>(now_time -
+                                                              last_time);
+    last_time = now_time;
 
-		scene.update(delta_time_us.count());
-		scene.render(window);
-		
-		glfwSwapBuffers(window);
-	}
+    glfwPollEvents();
 
-	bonobo::deinit();
-	return EXIT_SUCCESS;
+    if (scene.getInputHandler().GetKeycodeState(GLFW_KEY_ESCAPE) &
+        JUST_PRESSED) {
+      glfwSetWindowShouldClose(window, GL_TRUE);
+    }
+    if (scene.getInputHandler().GetKeycodeState(GLFW_KEY_M) & JUST_RELEASED) {
+      window_manager.ToggleFullscreenStatusForWindow(window);
+    }
+
+    scene.update(delta_time_us.count());
+    scene.render(window);
+
+    glfwSwapBuffers(window);
+  }
+
+  bonobo::deinit();
+  return EXIT_SUCCESS;
 }
