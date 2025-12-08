@@ -65,6 +65,8 @@ private:
   // --- 纹理 ---
   GLuint _texBark;
   GLuint _texLeaf;
+  GLuint _normalBark;
+  GLuint _normalLeaf;
   GLuint _texLeafMask;
   GLuint _texFloor;
   GLuint _texGrassMask;

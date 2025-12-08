@@ -5,6 +5,7 @@ uniform sampler2D specular_texture;
 uniform sampler2D light_d_texture;
 uniform sampler2D light_s_texture;
 uniform sampler2D light_a_texture;
+uniform sampler2D normal_texture;
 
 layout(pixel_center_integer) in vec4 gl_FragCoord;
 
@@ -19,8 +20,10 @@ void main() {
   vec3 light_d = texelFetch(light_d_texture, pixel_coord, 0).rgb;
   vec3 light_s = texelFetch(light_s_texture, pixel_coord, 0).rgb;
   vec3 light_a = texelFetch(light_a_texture, pixel_coord, 0).rgb;
-  const vec3 ambient = vec3(0.15);
+  vec3 normal = texelFetch(normal_texture, pixel_coord, 0).rgb;
+  // const vec3 ambient = vec3(0.15);
 
-  frag_color = vec4((light_d + light_a) * diffuse + light_s * specular, 1.0);
-  frag_color = vec4(light_a, 1.0);
+  // frag_color = vec4((light_d + light_a) * diffuse + light_s * specular, 1.0);
+  // frag_color = vec4(normal, 1.0);
+  frag_color = vec4(light_s, 1.0);
 }

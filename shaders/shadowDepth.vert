@@ -22,5 +22,10 @@ void main() {
   if (lables == 0) {
     model_to_world = vertex_model_to_world;
   }
-  gl_Position = light_world_to_clip_matrix * model_to_world * vec4(vertex, 1.0);
+  float scale = 1.0;
+  if (lables == 3) {
+    scale = 0.02;
+  }
+  gl_Position =
+      light_world_to_clip_matrix * model_to_world * vec4(scale * vertex, 1.0);
 }
