@@ -515,11 +515,11 @@ void ForestScene::renderAllobjects(GLuint shaderProgram) {
 }
 
 void ForestScene::renderGbuffer() {
-  glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+  // glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
   // glBindFramebuffer(GL_FRAMEBUFFER, gbufferFBO);
-  glClearDepthf(1.0f);
-  glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-  glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+  // glClearDepthf(1.0f);
+  // glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+  // glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
   glUseProgram(_gBufferShader);
   {
 
@@ -962,12 +962,12 @@ void ForestScene::render(GLFWwindow *window) {
   bonobo::changePolygonMode(_polygonMode);
   // 1. 渲染地面
   // Node::render 通常接受 (VP矩阵, Model矩阵)
-  renderSkybox(_camera.GetWorldToViewMatrix(), _camera.GetViewToClipMatrix());
+
   {
 
     _terrain_world =
         glm::mat4(glm::mat4(1.0f) * _quadNode.get_transform().GetMatrix());
-    _quadNode.render(_camera.GetWorldToClipMatrix(), glm::mat4(1.0f));
+    // _quadNode.render(_camera.GetWorldToClipMatrix(), glm::mat4(1.0f));
   }
 
   // 2. 渲染树木
@@ -984,19 +984,19 @@ void ForestScene::render(GLFWwindow *window) {
     }
 
     // 调用 Node 的渲染
-    t.second.render(_camera.GetWorldToClipMatrix(), glm::mat4(1.0f),
-                    _treeCount);
+    // t.second.render(_camera.GetWorldToClipMatrix(), glm::mat4(1.0f),
+    //                 _treeCount);
   }
   for (auto &g : _grass) {
-    glDisable(GL_CULL_FACE);
-    g.second.render(_camera.GetWorldToClipMatrix(), glm::mat4(1.0f),
-                    _grassCount);
+    // glDisable(GL_CULL_FACE);
+    // g.second.render(_camera.GetWorldToClipMatrix(), glm::mat4(1.0f),
+    //                 _grassCount);
   }
   // lightgeometry.render(_camera.GetWorldToClipMatrix(), glm::mat4(1.0f));
 
-  // renderShadowMap();
-
-  // renderGbuffer();
+  renderShadowMap();
+  renderSkybox(_camera.GetWorldToViewMatrix(), _camera.GetViewToClipMatrix());
+  renderGbuffer();
 
   // renderLightContribution();
   // renderFinalResult();
