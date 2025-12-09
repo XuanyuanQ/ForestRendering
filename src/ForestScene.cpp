@@ -1058,9 +1058,9 @@ void ForestScene::update(double deltaTimeUs) {
   // 利用 sin/cos 让太阳绕 Z 轴旋转 (模拟东升西落)
   // 假设太阳从 X 正方向(东)升起，到 Y 正方向(正午)，落向 X 负方向(西)
   // timeOffset 用来调整初始时间，让程序一开始是白天
-  // _lightPosition.x = sin(_sunTime) * sunRadius; // 东西移动
-  // _lightPosition.y = cos(_sunTime) * sunRadius; // 上下移动
-  // _lightPosition.z = 10.0f; // 稍微偏南或偏北一点，产生好看的阴影角度
+//   _lightPosition.x = sin(_sunTime) * sunRadius; // 东西移动
+//   _lightPosition.y = cos(_sunTime) * sunRadius; // 上下移动
+//   _lightPosition.z = 10.0f; // 稍微偏南或偏北一点，产生好看的阴影角度
   _lightPosition = glm::vec3(lightX, lightY, lightZ);
   updateLightMatrix(_lightPosition);
   // lightgeometry.get_transform().SetTranslate(_lightPosition);
@@ -1113,6 +1113,7 @@ void ForestScene::render(GLFWwindow *window) {
   // lightgeometry.render(_camera.GetWorldToClipMatrix(), glm::mat4(1.0f));
 
   renderShadowMap();
+  glViewport(0, 0, w, h);
   // simulationForest(_forestTestShader);//世界坐标原点，太阳指向方向
   // simulationSun(_sunTestShader);//模拟太阳位置
   renderSkybox(_camera.GetWorldToViewMatrix(), _camera.GetViewToClipMatrix());
