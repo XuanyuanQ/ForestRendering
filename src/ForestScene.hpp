@@ -115,6 +115,7 @@ private:
   float _sunTime;  // 太阳的专属时间
   float _daySpeed; // 太阳移动速度
   bool _applyShadow;
+  bool _isVolumetricLight;
   float lightX{3.0f};
   float lightY{14.0f};
   float lightZ{11.0f};
