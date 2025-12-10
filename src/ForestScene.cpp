@@ -15,7 +15,9 @@ ForestScene::ForestScene(WindowManager &windowManager)
               0.01f, 1000.0f),
       _isPaused(false),                    // 默认自动播放
       _applyShadow(false), _sunTime(0.0f), // 从 0 开始
-      _daySpeed(0.5f)                      // 默认速度
+      _daySpeed(0.5f),                      // 默认速度
+      _isWindEnabled(false),
+	  _windStrength(0.5f)
 {
   _isVolumetricLight = false;
   _camera.mWorld.SetTranslate(glm::vec3(0.0f, 10.0f, 20.0f));
@@ -588,7 +590,8 @@ void ForestScene::renderAllobjects(GLuint shaderProgram) {
   }
 }
 
-void ForestScene::renderGbuffer() {
+void ForestScene::
+renderGbuffer() {
   // glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
   // glBindFramebuffer(GL_FRAMEBUFFER, gbufferFBO);
   // glClearDepthf(1.0f);
@@ -620,6 +623,9 @@ void ForestScene::renderGbuffer() {
                 _applyShadow);
     glUniform1i(glGetUniformLocation(_gBufferShader, "isVolumetricLight"),
                 _isVolumetricLight);
+	glUniform1f(glGetUniformLocation(_gBufferShader, "elapsed_time_s"), _elapsedTimeS);
+	float currentWind = _isWindEnabled ? _windStrength : 0.0f;
+	glUniform1f(glGetUniformLocation(_gBufferShader, "wind_strength"), currentWind * 0.01);
 
     glActiveTexture(GL_TEXTURE10);
     glBindTexture(GL_TEXTURE_2D, shadowMap);
@@ -935,6 +941,8 @@ bool ForestScene::setup() {
     glUniform3fv(glGetUniformLocation(program, "camera_position"), 1,
                  glm::value_ptr(_camera.mWorld.GetTranslation()));
     glUniform1f(glGetUniformLocation(program, "elapsed_time_s"), _elapsedTimeS);
+	float actualStrength = _isWindEnabled ? _windStrength : 0.0f;
+	glUniform1f(glGetUniformLocation(program, "wind_strength"), actualStrength);
   };
 
   // 遍历所有 Mesh，创建 Node
@@ -1149,12 +1157,14 @@ void ForestScene::render(GLFWwindow *window) {
     ImGui::SliderFloat("lightX", &lightX, -100.0f, 100.0f);
     ImGui::SliderFloat("lightY", &lightY, -100.0f, 100.0f);
     ImGui::SliderFloat("lightZ", &lightZ, -100.0f, 100.0f);
-
+    ImGui::Checkbox("Enable Wind", &_isWindEnabled);
+    ImGui::SliderFloat("Wind Strength", &_windStrength, 0.0f, 2.0f);
     // 手动时间滑条
-    if (ImGui::SliderFloat("Time of Day", &_sunTime, 0.0f, 6.28f)) {
+//    if (ImGui::SliderFloat("Time of Day", &_sunTime, 0.0f, 6.28f)) {
+//      _isPaused = true;
+//    }
+	  
 
-      _isPaused = true;
-    }
     ImGui::Text("Time: %.2f", _elapsedTimeS);
   }
 

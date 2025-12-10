@@ -149,4 +149,8 @@ private:
   unsigned int cubeVBO = 0;
   GLuint _terrainVao;
   GLuint _terrainVbo;
+	
+  // control wind
+  bool _isWindEnabled;
+  float _windStrength;
 };
