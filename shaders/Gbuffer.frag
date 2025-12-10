@@ -33,6 +33,8 @@ in VS_OUT {
   vec4 FragPosLightSpace;
 }
 fs_in;
+flat in int v_InstanceID;
+flat in int v_VertexID;
 out vec4 frag_color;
 
 vec3 getSunColor(float sunHeight) {
@@ -290,6 +292,43 @@ float calculateLight(vec3 world_pos, mat4 light_projection,
 float Random(vec2 co) {
   return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
 }
+float random(float seed) { return fract(sin(seed) * 43758.5453123); }
+vec3 adjustSaturation(vec3 color, float saturation) {
+  // 计算灰度值 (亮度)
+  float grey = dot(color, vec3(0.299, 0.587, 0.114));
+  // 在灰度和原色之间插值
+  return mix(vec3(grey), color, saturation);
+}
+float adjustLeavesCol(vec3 stayGreen, vec3 turnOrange, vec3 turnRed) {
+
+  float noise = 1.6 * random(float(v_VertexID)) * cos(float(v_InstanceID));
+
+  // pow(noise, 2.5) 意味着大部分结果会比较小（偏绿），
+  // 只有当 noise 接近 1.0 时，结果才会迅速变大（变红）。
+  // 这符合“初秋”的感觉：大部分还是绿/黄，少部分红。
+  float t = pow(noise, 3.5);
+
+  vec3 finalTint;
+
+  // 我们使用两个 mix 来实现三阶段过渡
+  if (t < 0.5) {
+    // 前 50% 的概率：在“墨绿”和“金橙”之间过渡
+    // 将 t 从 [0.0, 0.5] 映射到 [0.0, 1.0]
+    float subT = t * 2.0;
+    finalTint = mix(stayGreen, turnOrange, subT);
+  } else {
+    // 后 50% 的概率：在“金橙”和“火红”之间过渡
+    // 将 t 从 [0.5, 1.0] 映射到 [0.0, 1.0]
+    float subT = (t - 0.5) * 2.0;
+    finalTint = mix(turnOrange, turnRed, subT);
+  }
+
+  // --- 【明度微调】 ---
+  // 红叶子通常比绿叶子看起来颜色更深重一点
+  // 如果 t 比较大（偏红），稍微降低一点亮度
+  float brightness = 1.0 - t * 0.2; // 0.8 ~ 1.0
+  return finalTint * brightness;
+}
 
 // 米氏散射相位函数
 float GetMiePhase(float g, float cosTheta) {
@@ -421,15 +460,31 @@ void main() {
     finalNormal = normalize(fs_in.TBN * rawNormal);
     shininess = 30.0;
     specularStrength = 0.3;
+    // --- 【初秋色彩定义】 ---
+
+    // 阶段A: 保持原本的绿色 (Tint = 1.0 表示不改变)
+    // 稍微加一点点蓝绿色调，让没变色的叶子看起来更深沉
+    vec3 stayGreen = vec3(0.8, 1.05, 0.8);
+
+    // 阶段B: 变黄/橙色 (增加红和绿，减少蓝)
+    // 这是一个明亮的金橙色
+    vec3 turnOrange = vec3(1.4, 1.1, 0.3);
+
+    // 阶段C: 变红色 (大幅增加红，大幅减少绿和蓝)
+    // 这是一个鲜艳的枫红色
+    vec3 turnRed = vec3(1.6, 0.3, 0.2);
+    // 应用颜色
+    albedoTexture.rgb *= adjustLeavesCol(stayGreen, turnOrange, turnRed);
+    albedoTexture.rgb = adjustSaturation(albedoTexture.rgb, 1.1);
   } else if (lables == 2) {
     vec3 rawNormal = texture(normals_texture, fs_in.texcoord).rgb;
-
+    float noise = 1.2 * random(float(v_InstanceID));
     rawNormal = rawNormal * 2.0 - 1.0;
-    rawNormal.xy *= 1.2;
+    rawNormal.xy *= 1.2 * noise;
     finalNormal = normalize(fs_in.TBN * rawNormal);
-    shininess = 5.0;
-    specularStrength = 0.02;
-    vec3 woodTint = vec3(1.0, 0.8, 0.6);
+    shininess = 5.0 * noise;
+    specularStrength = 0.02 * noise;
+    vec3 woodTint = vec3(1.0, 0.8, 0.6) * (noise + .5);
     albedoTexture.rgb *= woodTint;
 
   } else {
@@ -444,6 +499,10 @@ void main() {
   specular = vec3(1.0);
   ambient = vec3(1.0);
   if (lables == 3) {
+    vec3 stayGreen = vec3(0.9, 0.95, 0.6);
+    vec3 turnStraw = vec3(0.5, 0.4, 0.9);
+    vec3 turnBrown = vec3(0.7, 0.6, 0.4);
+    albedoTexture.rgb *= adjustLeavesCol(stayGreen, turnStraw, turnBrown);
     calculateGrass(albedoTexture, L, V, finalNormal, ambient, diffuse,
                    specular);
   } else if (lables == 1 || lables == 2) {

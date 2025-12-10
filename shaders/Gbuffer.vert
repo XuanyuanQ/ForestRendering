@@ -42,7 +42,9 @@ out VS_OUT {
   vec4 FragPosLightSpace;
 }
 vs_out;
-
+flat out int v_InstanceID;
+flat out int v_VertexID;
+float random(float seed) { return fract(sin(seed) * 43758.5453123); }
 float waveFun(float time, float A, float f, float p, float k, vec2 D,
               vec3 point) {
   float a = sin((D.x * point.x + (D.y) * point.z) * f + time * p) * 0.5 + 0.5;
@@ -57,6 +59,8 @@ float derivativeMain(float time, float A, float f, float p, float k, vec2 D,
 }
 
 void main() {
+  v_InstanceID = gl_InstanceID;
+  v_VertexID = gl_VertexID;
   vs_out.texcoord = texcoord.xy;
   mat4 model_to_world;
   // vs_out.normal_model_to_world = transpose(inverse(model_to_world));
@@ -100,7 +104,9 @@ void main() {
   // 添加风吹
   if (wind_strength > 0.0) {
     // float wind = instanceWindsSpeed * wind_strength;
-    float wind = wind_strength;
+
+    float wind =
+        wind_strength * random(float(v_VertexID)) * cos(float(v_VertexID));
     vec3 windDir = normalize(vec3(1.0, 0.0, 0.5)); // 统一风向
     switch (lables) {
     case 3: // Grass
