@@ -55,7 +55,8 @@ vec3 getSunColor(float sunHeight) {
     // 纯晚上
     sunColor = nightSun;
   }
-  return sunColor;
+  float factor = pow(150, sunHeight * 0.6 + 1.0);
+  return sunColor * factor;
 }
 
 void calculateGrass(in vec4 albedoTexture, in vec3 L, in vec3 V, in vec3 N,
@@ -286,99 +287,97 @@ float calculateLight(vec3 world_pos, mat4 light_projection,
 // 体积光计算核心函数
 // ==================================================================================
 
-// 计算相位的函数（Henyey-Greenstein），用于模拟米氏散射
-// g: 散射各向异性 (-1 到
-// 1)。正值表示向前散射（逆光看更亮），适合模拟空气中的灰尘。 cosTheta:
-// 视线方向和光线方向的夹角余弦值
+float Random(vec2 co) {
+  return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+// 米氏散射相位函数
 float GetMiePhase(float g, float cosTheta) {
+  // 针对极高 G 值的数值稳定性优化
   float g2 = g * g;
   float num = 1.0 - g2;
   float denom = 1.0 + g2 - 2.0 * g * cosTheta;
+  // 防止分母为 0
+  denom = max(denom, 0.0001);
   return num / (4.0 * 3.14159265 * pow(denom, 1.5));
 }
 
-// 用于在体积计算中查询阴影的辅助函数
-// 类似于你之前的 calculateLight，但去掉了 bias 和 PCF 以提高性能
-float GetVolumetricShadow(vec3 worldPos, mat4 lightMatrix,
-                          sampler2D shadowMap) {
-  vec4 clipPos = lightMatrix * vec4(worldPos, 1.0);
-  vec3 projCoords = clipPos.xyz / clipPos.w;
-  projCoords = projCoords * 0.5 + 0.5;
-
-  if (projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 ||
-      projCoords.y < 0.0 || projCoords.y > 1.0)
-    return 1.0; // 超出范围视为被照亮
-
-  float closestDepth = texture(shadowMap, projCoords.xy).r;
-  float currentDepth = projCoords.z;
-
-  // 这里不需要 bias，或者用一个极小的 bias，因为体积是连续的
-  return currentDepth > closestDepth ? 0.0 : 1.0;
-}
-
-// 主函数
+// 核心计算函数
 vec3 CalculateVolumetricFog(
-    vec3 worldPos,       // 当前像素对应的世界坐标（可能是远平面上的点）
-    vec3 cameraPos,      // 摄像机位置
-    vec3 sunDir,         // 指向太阳的方向 (normalize(sunPos - worldZero))
-    vec3 sunCol,         // 太阳光颜色强度
-    mat4 lightMatrix,    // 光照视图投影矩阵
-    sampler2D shadowMap, // 阴影贴图
-    float sceneDepth     // 场景线性深度（用于提前停止步进）
-) {
-  // --- 配置参数 ---
-  int STEPS = 16;             // 步进次数。越高越好，但越卡。8/16/32/64
-  float MAX_DISTANCE = 200.0; // 光柱的最大可见距离。
-  float FOG_DENSITY = 0.05;   // 雾的密度。控制光柱的强度。
-  float SCATTERING_G = 0.8;   // 散射系数。接近 1 表示逆光更强。
+    vec3 worldPos, vec3 cameraPos, vec3 sunDir,
+    vec3 sunHighIntensityColor, // 【重点】传入一个强度极高的太阳颜色
+                                // (例如原强度 * 100)
+    mat4 lightMatrix, sampler2D shadowMap, vec2 screenPos) {
+  // --- 【参数调优区】 ---
+  int STEPS = 32; // 步数，越多越好
+  float MAX_DISTANCE = 150.0;
+
+  // 1. 雾的“绝对天花板”和“地板”高度
+  // 假设你的树高 20米。
+  float FOG_BOTTOM = 0.0; // 地面从 0 开始有雾
+  float FOG_TOP =
+      12.0; // 【关键】超过 12米（树冠中上部）彻底没雾！确保树顶不白。
+
+  // 2. 基础密度
+  float BASE_DENSITY = 0.02;
+
+  // 3. 极致的各向异性
+  // 【关键】参考图那种锋利感，需要 G 无限接近 1.0。试试 0.99甚至0.995
+  float SCATTERING_G = 0.99;
 
   // --- 初始化射线 ---
   vec3 rayVector = worldPos - cameraPos;
   float rayLength = length(rayVector);
   vec3 rayDir = rayVector / rayLength;
-
-  // 限制射线的最大长度，不能超过设定的最大距离，也不能穿透场景物体
   float targetDistance = min(rayLength, MAX_DISTANCE);
-
-  // 如果你有线性的场景深度值，也可以用它来截断射线
-  // targetDistance = min(targetDistance, sceneDepth);
-
   float stepLength = targetDistance / float(STEPS);
-  vec3 currentPos = cameraPos;
 
-  // --- 累加变量 ---
+  // Dithering 抖动
+  float jitter = Random(screenPos + vec2(sin(sunDir.x), cos(sunDir.z)));
+  vec3 currentPos = cameraPos + rayDir * stepLength * jitter;
+
   vec3 accumulatedLight = vec3(0.0);
-  float transmittance = 1.0; // 透射率，初始为 1 (完全透明)
+  float transmittance = 1.0;
 
-  // --- 计算相位函数 ---
-  // 视线方向是射线的反方向
   float cosTheta = dot(rayDir, sunDir);
   float phaseVal = GetMiePhase(SCATTERING_G, cosTheta);
 
-  // --- 光线步进循环 ---
   for (int i = 0; i < STEPS; ++i) {
-    // 1. 判断当前点是否在阴影中
-    // 这是形成光柱最关键的一步！
-    float shadow = GetVolumetricShadow(currentPos, lightMatrix, shadowMap);
+    // --- 【核心改进：基于高度的密度计算】 ---
+    // 使用 smoothstep 创建一个平滑但有硬边界的雾层
+    // 低于 FOG_BOTTOM 是 1.0，高于 FOG_TOP 绝对是 0.0
+    float heightFactor = 1.0 - smoothstep(FOG_BOTTOM, FOG_TOP, currentPos.y);
+    float currentDensity = BASE_DENSITY * heightFactor;
 
-    // 如果被照亮 (shadow > 0)
-    if (shadow > 0.001) {
-      // 2. 计算该点的散射光
-      // 入射光 = 太阳颜色 * 阴影遮挡(1或0) * 沿途的衰减(透射率)
-      vec3 incomingLight = sunCol * shadow * transmittance;
+    // 只有当这里有雾，并且没被遮挡时，才计算光照
+    if (currentDensity > 0.0001) {
+      // 阴影测试 (此处省略具体实现，沿用你之前的 GetVolumetricShadow 逻辑即可)
+      // 注意需确保 ShadowMap 采样正确
+      vec4 clipPos = lightMatrix * vec4(currentPos, 1.0);
+      vec3 projCoords = clipPos.xyz / clipPos.w;
+      projCoords = projCoords * 0.5 + 0.5;
+      float shadow = 1.0;
+      if (projCoords.z < 1.0 && projCoords.x > 0.0 && projCoords.x < 1.0 &&
+          projCoords.y > 0.0 && projCoords.y < 1.0) {
+        float closestDepth = texture(shadowMap, projCoords.xy).r;
+        // 假设 ShadowMap 背景是 1.0，物体深度 < 1.0
+        if (projCoords.z > closestDepth + 0.001)
+          shadow = 0.0; // 在阴影里
+      }
 
-      // 散射到摄像机的光 = 入射光 * 密度 * 步长 * 相位
-      accumulatedLight += incomingLight * FOG_DENSITY * stepLength * phaseVal;
+      if (shadow > 0.01) {
+        // 使用传入的高强度光计算
+        vec3 incomingLight = sunHighIntensityColor * shadow * transmittance *
+                             currentDensity * stepLength;
+        accumulatedLight += incomingLight * phaseVal;
+      }
+
+      // 自身衰减
+      transmittance *= exp(-currentDensity * stepLength);
     }
 
-    // 3. 根据比尔-朗伯定律计算衰减 (雾自身会遮挡后面的光)
-    transmittance *= exp(-FOG_DENSITY * stepLength);
-
-    // 优化：如果透射率太低（太黑了），就提前退出
     if (transmittance < 0.01)
       break;
-
-    // 4. 前进一步
     currentPos += rayDir * stepLength;
   }
 
@@ -464,14 +463,11 @@ void main() {
 
   vec3 volumetricLight = vec3(0.0);
   if (isVolumetricLight == 1) {
-    vec3 sunColor = getSunColor(L.y) * 5;
+    vec3 sunColor = getSunColor(L.y);
     volumetricLight = CalculateVolumetricFog(
-        fs_in.world_pos, camera_position,
-        L,        // 假设 light_direction 是指向太阳的
-        sunColor, // 例如 vec3(10.0) 强度要高一些
-        light_world_to_clip_matrix, shadow_texture,
-        1000.0 // 暂时传入一个很大的深度值，之后可以用真实的线性深度
-    );
+        fs_in.world_pos, camera_position, L, sunColor,
+        light_world_to_clip_matrix, shadow_texture, gl_FragCoord.xy);
   }
+
   frag_color = vec4(sceneColor + volumetricLight, 1.0);
 }
