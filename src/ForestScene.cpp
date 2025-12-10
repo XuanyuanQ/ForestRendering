@@ -15,10 +15,8 @@ ForestScene::ForestScene(WindowManager &windowManager)
               0.01f, 1000.0f),
       _isPaused(false),                    // 默认自动播放
       _applyShadow(false), _sunTime(0.0f), // 从 0 开始
-      _daySpeed(0.5f),                      // 默认速度
-      _isWindEnabled(false),
-	  _windStrength(0.5f)
-{
+      _daySpeed(0.5f),                     // 默认速度
+      _isWindEnabled(false), _windStrength(0.5f) {
   _isVolumetricLight = false;
   _camera.mWorld.SetTranslate(glm::vec3(0.0f, 10.0f, 20.0f));
   _camera.mMouseSensitivity = glm::vec2(0.003f);
@@ -141,10 +139,10 @@ GLuint ForestScene::createQuadsForPatch() {
   return _terrainVao;
 }
 
-std::vector<glm::mat4> ForestScene::generateTreeTransforms(int count, int Width,
-                                                           int Depth) {
-  std::vector<glm::mat4> matrices;
-  matrices.reserve(count);
+std::vector<InstanceData>
+ForestScene::generateTreeTransforms(int count, int Width, int Depth) {
+  std::vector<InstanceData> InstanceDatas;
+  InstanceDatas.reserve(count);
   int forestWidth = Width;
   int forestDepth = Depth;
 
@@ -159,12 +157,14 @@ std::vector<glm::mat4> ForestScene::generateTreeTransforms(int count, int Width,
     float rotAngle = static_cast<float>(rand() % 360);
     model =
         glm::rotate(model, glm::radians(rotAngle), glm::vec3(0.0f, 1.0f, 0.0f));
-    // model = glm::mat4(1.0f);
-    // model = glm::translate(model, glm::vec3(0, 3, 5));
-    // model = glm::scale(model, glm::vec3(0.3));
-    matrices.push_back(model);
+    (float)rand() / RAND_MAX;
+    InstanceData data;
+    data.modelMatrix = model;
+    data.windSpeed = (float)rand() / RAND_MAX;
+
+    InstanceDatas.push_back(data);
   }
-  return matrices;
+  return InstanceDatas;
 }
 void ForestScene::simulationSun(GLuint shaderProgram) {
   glUseProgram(shaderProgram);
@@ -483,6 +483,11 @@ void ForestScene::renderFinalResult() {
   glBindTexture(GL_TEXTURE_2D, 0);
 }
 void ForestScene::renderAllobjects(GLuint shaderProgram) {
+  glUniform1f(glGetUniformLocation(_gBufferShader, "elapsed_time_s"),
+              _elapsedTimeS);
+  float currentWind = _isWindEnabled ? _windStrength : 0.0f;
+  glUniform1f(glGetUniformLocation(_gBufferShader, "wind_strength"),
+              currentWind * 0.01);
 
   int label = 0;
 
@@ -590,8 +595,7 @@ void ForestScene::renderAllobjects(GLuint shaderProgram) {
   }
 }
 
-void ForestScene::
-renderGbuffer() {
+void ForestScene::renderGbuffer() {
   // glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
   // glBindFramebuffer(GL_FRAMEBUFFER, gbufferFBO);
   // glClearDepthf(1.0f);
@@ -623,9 +627,6 @@ renderGbuffer() {
                 _applyShadow);
     glUniform1i(glGetUniformLocation(_gBufferShader, "isVolumetricLight"),
                 _isVolumetricLight);
-	glUniform1f(glGetUniformLocation(_gBufferShader, "elapsed_time_s"), _elapsedTimeS);
-	float currentWind = _isWindEnabled ? _windStrength : 0.0f;
-	glUniform1f(glGetUniformLocation(_gBufferShader, "wind_strength"), currentWind * 0.01);
 
     glActiveTexture(GL_TEXTURE10);
     glBindTexture(GL_TEXTURE_2D, shadowMap);
@@ -852,13 +853,13 @@ bool ForestScene::setup() {
   // 2. 准备 Instancing VBO Setup 函数
   // ----------------------------------------------------------------
   // 先生成矩阵数据
-  auto tree_matrices = generateTreeTransforms(_treeCount);
+  std::vector<InstanceData> instances = generateTreeTransforms(_treeCount);
 
   // 把矩阵上传到 VBO
   glGenBuffers(1, &_instanceVBO);
   glBindBuffer(GL_ARRAY_BUFFER, _instanceVBO);
-  glBufferData(GL_ARRAY_BUFFER, _treeCount * sizeof(glm::mat4),
-               tree_matrices.data(), GL_STATIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, instances.size() * sizeof(InstanceData),
+               instances.data(), GL_STATIC_DRAW);
   glBindBuffer(GL_ARRAY_BUFFER, 0); // 解绑
 
   // 定义一个 Lambda，用于在 loadObjects 时回调配置 VAO
@@ -866,15 +867,21 @@ bool ForestScene::setup() {
     glBindBuffer(GL_ARRAY_BUFFER, _instanceVBO);
 
     size_t vec4Size = sizeof(glm::vec4);
-
+    GLsizei stride = sizeof(InstanceData);
     int baseLocation = 7; // <--- 从 7 开始，避开 tangent(3) 和 binormal(4)
     for (int i = 0; i < 4; i++) {
       glEnableVertexAttribArray(baseLocation + i);
-      glVertexAttribPointer(baseLocation + i, 4, GL_FLOAT, GL_FALSE,
-                            sizeof(glm::mat4), (void *)(i * vec4Size));
+      glVertexAttribPointer(baseLocation + i, 4, GL_FLOAT, GL_FALSE, stride,
+                            (void *)(i * vec4Size));
       glVertexAttribDivisor(baseLocation + i, 1);
     }
-
+    int windLocation = baseLocation + 4; // Location 11
+    glEnableVertexAttribArray(windLocation);
+    glVertexAttribPointer(
+        windLocation, 1, GL_FLOAT, GL_FALSE, stride,
+        (void *)(sizeof(glm::mat4)) // 偏移量: 跳过矩阵的 64 字节
+    );
+    glVertexAttribDivisor(windLocation, 1);
     // 返回 _instanceVBO 的 ID，
     return _instanceVBO;
   };
@@ -894,7 +901,7 @@ bool ForestScene::setup() {
   auto grass_matrices = generateTreeTransforms(_grassCount, 100, 100);
   glGenBuffers(1, &_instanceVBO);
   glBindBuffer(GL_ARRAY_BUFFER, _instanceVBO);
-  glBufferData(GL_ARRAY_BUFFER, _grassCount * sizeof(glm::mat4),
+  glBufferData(GL_ARRAY_BUFFER, grass_matrices.size() * sizeof(InstanceData),
                grass_matrices.data(), GL_STATIC_DRAW);
   glBindBuffer(GL_ARRAY_BUFFER, 0); // 解绑
   std::vector<bonobo::mesh_data> grass_meshes = bonobo::loadObjects(
@@ -941,8 +948,8 @@ bool ForestScene::setup() {
     glUniform3fv(glGetUniformLocation(program, "camera_position"), 1,
                  glm::value_ptr(_camera.mWorld.GetTranslation()));
     glUniform1f(glGetUniformLocation(program, "elapsed_time_s"), _elapsedTimeS);
-	float actualStrength = _isWindEnabled ? _windStrength : 0.0f;
-	glUniform1f(glGetUniformLocation(program, "wind_strength"), actualStrength);
+    float actualStrength = _isWindEnabled ? _windStrength : 0.0f;
+    glUniform1f(glGetUniformLocation(program, "wind_strength"), actualStrength);
   };
 
   // 遍历所有 Mesh，创建 Node
@@ -1160,10 +1167,9 @@ void ForestScene::render(GLFWwindow *window) {
     ImGui::Checkbox("Enable Wind", &_isWindEnabled);
     ImGui::SliderFloat("Wind Strength", &_windStrength, 0.0f, 2.0f);
     // 手动时间滑条
-//    if (ImGui::SliderFloat("Time of Day", &_sunTime, 0.0f, 6.28f)) {
-//      _isPaused = true;
-//    }
-	  
+    //    if (ImGui::SliderFloat("Time of Day", &_sunTime, 0.0f, 6.28f)) {
+    //      _isPaused = true;
+    //    }
 
     ImGui::Text("Time: %.2f", _elapsedTimeS);
   }

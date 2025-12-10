@@ -13,6 +13,11 @@
 #include "core/node.hpp"
 #define SHADOW_WIDTH 1920
 #define SHADOW_HEIGHT 1920
+
+struct InstanceData {
+  glm::mat4 modelMatrix; // 64 bytes
+  float windSpeed;       // 4 bytes
+};
 class ForestScene {
 public:
   ForestScene(WindowManager &windowManager);
@@ -27,8 +32,8 @@ public:
 
 private:
   // 生成矩阵数据的辅助函数
-  std::vector<glm::mat4> generateTreeTransforms(int count, int Width = 100,
-                                                int Depth = 100);
+  std::vector<InstanceData> generateTreeTransforms(int count, int Width = 100,
+                                                   int Depth = 100);
 
   GLuint createQuadsForPatch();
   void rendtest(GLuint shaderProgram);
@@ -149,7 +154,7 @@ private:
   unsigned int cubeVBO = 0;
   GLuint _terrainVao;
   GLuint _terrainVbo;
-	
+
   // control wind
   bool _isWindEnabled;
   float _windStrength;
