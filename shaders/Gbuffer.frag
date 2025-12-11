@@ -341,6 +341,25 @@ float GetMiePhase(float g, float cosTheta) {
   return num / (4.0 * 3.14159265 * pow(denom, 1.5));
 }
 
+float GetAdaptiveIntensity(vec3 currentPos, vec3 sunDir, vec3 rayDir) {
+
+  // 1. 【高度衰减】基于位置 (Position Based)
+  // 逻辑：树根处(0m)光很强，树冠处(15m+)光变弱。
+  // 这样光束在穿过树冠时会变得柔和，不会掩盖叶子细节。
+  float height = max(0.0, currentPos.y);
+  // 0米处强度 1.0，20米处强度降为 0.2
+  float heightAtten = 1.0 - smoothstep(0.0, 25.0, height) * 0.8;
+
+  // 2. 【角度衰减】基于视角 (Angle Based)
+  // 逻辑：当你越是正对太阳看，我就越把强度压低一点，防止过曝。
+  float lookAtSun = dot(rayDir, sunDir); // 1.0 表示直视太阳
+  // 如果直视太阳(>0.9)，强度乘数会变小(比如乘以0.5)
+  // 侧面看时，强度保持 1.0
+  float angleAtten = 1.0 - smoothstep(0.8, 1.0, lookAtSun) * 0.8;
+
+  return heightAtten * angleAtten;
+}
+
 // 核心计算函数
 vec3 CalculateVolumetricFog(
     vec3 worldPos, vec3 cameraPos, vec3 sunDir,
@@ -380,7 +399,8 @@ vec3 CalculateVolumetricFog(
 
   float cosTheta = dot(rayDir, sunDir);
   float phaseVal = GetMiePhase(SCATTERING_G, cosTheta);
-
+  phaseVal = min(10, phaseVal);
+  float dynamicFactor = GetAdaptiveIntensity(currentPos, sunDir, rayDir);
   for (int i = 0; i < STEPS; ++i) {
     // --- 【核心改进：基于高度的密度计算】 ---
     // 使用 smoothstep 创建一个平滑但有硬边界的雾层
@@ -406,8 +426,8 @@ vec3 CalculateVolumetricFog(
 
       if (shadow > 0.01) {
         // 使用传入的高强度光计算
-        vec3 incomingLight = sunHighIntensityColor * shadow * transmittance *
-                             currentDensity * stepLength;
+        vec3 incomingLight = dynamicFactor * sunHighIntensityColor * shadow *
+                             transmittance * currentDensity * stepLength;
         accumulatedLight += incomingLight * phaseVal;
       }
 
@@ -522,10 +542,19 @@ void main() {
 
   vec3 volumetricLight = vec3(0.0);
   if (isVolumetricLight == 1) {
+    float a = 1.0;
+    if (lables == 2) {
+      a = 0.0;
+    }
+    if (lables == 1) {
+      a = 0.5;
+    }
     vec3 sunColor = getSunColor(L.y);
-    volumetricLight = CalculateVolumetricFog(
-        fs_in.world_pos, camera_position, L, sunColor,
-        light_world_to_clip_matrix, shadow_texture, gl_FragCoord.xy);
+    volumetricLight =
+        CalculateVolumetricFog(fs_in.world_pos, camera_position, L, sunColor,
+                               light_world_to_clip_matrix, shadow_texture,
+                               gl_FragCoord.xy) *
+        a;
   }
 
   frag_color = vec4(sceneColor + volumetricLight, 1.0);

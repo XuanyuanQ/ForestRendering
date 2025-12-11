@@ -75,11 +75,9 @@ void main() {
   vs_out.normal_model_to_world = transpose(inverse(model_to_world));
   float scale = 1.0;
   if (lables == 3) {
-    scale = 0.015;
+    scale = 0.008;
   }
-  if (lables == 1 || lables == 2) {
-    // scale = 0.4;
-  }
+
   vs_out.normal = vec3(vs_out.normal_model_to_world * vec4(normal, 0.0));
 
   // --- 计算 TBN  ---
@@ -177,9 +175,12 @@ void main() {
     }
   }
 
-  // if (lables == 0) {
-
-  // }
+  if (lables == 3) {
+    world_pos.y = -world_pos.y;
+  }
+  if (lables == 1 || lables == 2) {
+    world_pos.y += 3.0;
+  }
   vs_out.ndc = vertex_view_to_projection * vertex_world_to_view *
                model_to_world * vec4(world_pos, 1.0);
   vs_out.world_pos = world_pos;

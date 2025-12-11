@@ -21,9 +21,9 @@ ForestScene::ForestScene(WindowManager &windowManager)
   _camera.mWorld.SetTranslate(glm::vec3(0.0f, 10.0f, 20.0f));
   _camera.mMouseSensitivity = glm::vec2(0.003f);
   _camera.mMovementSpeed = glm::vec3(3.0f);
-
-  _treeCount = 25;
-  _grassCount = 500;
+  _particel_count = 150;
+  _treeCount = 15;
+  _grassCount = 100;
   _elapsedTimeS = 0.0f;
   _isLeavesMesh = false;
   _lightPosition = glm::vec3(-2.0f, 4.0f, -2.0f);
@@ -437,6 +437,47 @@ void ForestScene::initShadowMap() {
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
+void ForestScene::renderPartical(GLuint shaderProgram) {
+  glUseProgram(shaderProgram);
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, _texLeaf);
+  glUniform1i(glGetUniformLocation(shaderProgram, "txture"), 0);
+
+  glActiveTexture(GL_TEXTURE1);
+  glBindTexture(GL_TEXTURE_2D, _texLeafMask);
+  glUniform1i(glGetUniformLocation(shaderProgram, "mask"), 1);
+
+  glm::mat4 model = glm::mat4(1.0f);
+  // model = glm::translate(model, _lightPosition);
+  glUniformMatrix4fv(
+      glGetUniformLocation(shaderProgram, "vertex_model_to_world"), 1, GL_FALSE,
+      glm::value_ptr(model));
+  glUniformMatrix4fv(
+      glGetUniformLocation(shaderProgram, "vertex_world_to_view"), 1, GL_FALSE,
+      glm::value_ptr(_camera.GetWorldToViewMatrix()));
+
+  glUniformMatrix4fv(
+      glGetUniformLocation(shaderProgram, "vertex_view_to_projection"), 1,
+      GL_FALSE, glm::value_ptr(_camera.GetViewToClipMatrix()));
+  glm::vec3 u_TreeCrownCenter(20.0f, 43.0f, 20.0f);
+  glUniform1f(glGetUniformLocation(shaderProgram, "u_Time"), _elapsedTimeS);
+  glUniform3fv(glGetUniformLocation(shaderProgram, "u_TreeCrownCenter"), 1,
+               glm::value_ptr(u_TreeCrownCenter));
+  glm::vec3 u_TreeCrownSize(10.0f, 20.0f, 10.0f);
+  glUniform3fv(glGetUniformLocation(shaderProgram, "u_TreeCrownSize"), 1,
+               glm::value_ptr(u_TreeCrownSize));
+
+  glUniform3fv(glGetUniformLocation(shaderProgram, "light_position"), 1,
+               glm::value_ptr(_lightPosition));
+  glUniform3fv(glGetUniformLocation(shaderProgram, "camera_position"), 1,
+               glm::value_ptr(_camera.mWorld.GetTranslation()));
+
+  glBindVertexArray(_particelMesh.vao);
+  glDrawElementsInstanced(GL_TRIANGLES, _particelMesh.indices_nb,
+                          GL_UNSIGNED_INT, nullptr, _particel_count);
+  glBindVertexArray(0);
+}
+
 void ForestScene::renderFinalResult() {
   glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
   // glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -483,10 +524,10 @@ void ForestScene::renderFinalResult() {
   glBindTexture(GL_TEXTURE_2D, 0);
 }
 void ForestScene::renderAllobjects(GLuint shaderProgram) {
-  glUniform1f(glGetUniformLocation(_gBufferShader, "elapsed_time_s"),
+  glUniform1f(glGetUniformLocation(shaderProgram, "elapsed_time_s"),
               _elapsedTimeS);
   float currentWind = _isWindEnabled ? _windStrength : 0.0f;
-  glUniform1f(glGetUniformLocation(_gBufferShader, "wind_strength"),
+  glUniform1f(glGetUniformLocation(shaderProgram, "wind_strength"),
               currentWind * 0.01);
 
   int label = 0;
@@ -539,7 +580,8 @@ void ForestScene::renderAllobjects(GLuint shaderProgram) {
 
     else // trunk
     {
-      glDisable(GL_CULL_FACE);
+      // glDisable(GL_CULL_FACE);
+      glEnable(GL_CULL_FACE);
       glBindTexture(GL_TEXTURE_2D, 0); // 没 mask
     }
 
@@ -663,6 +705,7 @@ void ForestScene::renderShadowMap() {
   // std::cout << "ShadowMap Size: " << SHADOW_WIDTH << " x " << SHADOW_HEIGHT
   //           << std::endl;
   glUseProgram(_shadowMapShader);
+  // renderPartical(_particelShader);
   // glEnable(GL_CULL_FACE);
   // glCullFace(GL_FRONT);
 
@@ -831,6 +874,19 @@ bool ForestScene::setup() {
       {{ShaderType::vertex, "grass.vert"},
        {ShaderType::fragment, "grass.frag"}},
       _grassShader);
+  if (_grassShader == 0u) {
+    LogError("Failed to load _grassShader shader");
+    return -1;
+  }
+  _programManager.CreateAndRegisterProgram(
+      "_particelShader",
+      {{ShaderType::vertex, "particle.vert"},
+       {ShaderType::fragment, "particle.frag"}},
+      _particelShader);
+  if (_particelShader == 0u) {
+    LogError("Failed to load _particelShader shader");
+    return -1;
+  }
   GLuint tessHeightMapShader;
   _programManager.CreateAndRegisterProgram(
       "tessHeightMap",
@@ -898,12 +954,46 @@ bool ForestScene::setup() {
     LogError("Failed to load res/MapleTree.obj");
     return false;
   }
-  auto grass_matrices = generateTreeTransforms(_grassCount, 100, 100);
+  auto grass_matrices = generateTreeTransforms(_grassCount, 80, 80);
   glGenBuffers(1, &_instanceVBO);
   glBindBuffer(GL_ARRAY_BUFFER, _instanceVBO);
   glBufferData(GL_ARRAY_BUFFER, grass_matrices.size() * sizeof(InstanceData),
                grass_matrices.data(), GL_STATIC_DRAW);
   glBindBuffer(GL_ARRAY_BUFFER, 0); // 解绑
+  // 树叶粒子
+
+  auto particelVBO = [this]() -> GLuint {
+    glBindBuffer(GL_ARRAY_BUFFER, _particelVBO);
+
+    size_t vec4Size = sizeof(glm::vec4);
+    GLsizei stride = sizeof(InstanceData);
+    int baseLocation = 7; // <--- 从 7 开始，避开 tangent(3) 和 binormal(4)
+    for (int i = 0; i < 4; i++) {
+      glEnableVertexAttribArray(baseLocation + i);
+      glVertexAttribPointer(baseLocation + i, 4, GL_FLOAT, GL_FALSE, stride,
+                            (void *)(i * vec4Size));
+      glVertexAttribDivisor(baseLocation + i, 1);
+    }
+    int windLocation = baseLocation + 4; // Location 11
+    glEnableVertexAttribArray(windLocation);
+    glVertexAttribPointer(
+        windLocation, 1, GL_FLOAT, GL_FALSE, stride,
+        (void *)(sizeof(glm::mat4)) // 偏移量: 跳过矩阵的 64 字节
+    );
+    glVertexAttribDivisor(windLocation, 1);
+    // 返回 _particelVBO 的 ID，
+    return _particelVBO;
+  };
+
+  auto particel_matrices = generateTreeTransforms(_particel_count, 80, 80);
+  glGenBuffers(1, &_particelVBO);
+  glBindBuffer(GL_ARRAY_BUFFER, _particelVBO);
+  glBufferData(GL_ARRAY_BUFFER, particel_matrices.size() * sizeof(InstanceData),
+               particel_matrices.data(), GL_STATIC_DRAW);
+  glBindBuffer(GL_ARRAY_BUFFER, 0); // 解绑
+  _particelMesh =
+      parametric_shapes::createQuad(100.0f, 100.0f, 10, 10, particelVBO);
+
   std::vector<bonobo::mesh_data> grass_meshes = bonobo::loadObjects(
       config::resources_path("91-trava-kolosok/TravaKolosok.obj"),
       setupInstanceVBO);
@@ -1131,11 +1221,13 @@ void ForestScene::render(GLFWwindow *window) {
   // lightgeometry.render(_camera.GetWorldToClipMatrix(), glm::mat4(1.0f));
 
   renderShadowMap();
+
   glViewport(0, 0, w, h);
   // simulationForest(_forestTestShader);//世界坐标原点，太阳指向方向
   // simulationSun(_sunTestShader);//模拟太阳位置
   renderSkybox(_camera.GetWorldToViewMatrix(), _camera.GetViewToClipMatrix());
   renderGbuffer();
+  renderPartical(_particelShader);
 
   // renderLightContribution();
   // renderFinalResult();
@@ -1222,7 +1314,7 @@ void ForestScene::initSkybox() {
 void ForestScene::renderSkybox(glm::mat4 const &view,
                                glm::mat4 const &projection) {
   // 关闭深度测试和深度写入
-  glDisable(GL_DEPTH_TEST);
+  // glDisable(GL_DEPTH_TEST);
   glDepthMask(GL_FALSE);
 
   // 关闭剔除

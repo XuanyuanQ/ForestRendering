@@ -18,10 +18,11 @@ namespace parametric_shapes {
 //!                             you two edges, and so on.
 //! @return wrapper around OpenGL objects' name containing the geometry
 //!         data
-bonobo::mesh_data createQuad(float const width, float const height,
-                             unsigned int const horizontal_split_count = 0u,
-                             unsigned int const vertical_split_count = 0u,
-                             const unsigned int NUM_PATCH_PTS = 0);
+bonobo::mesh_data
+createQuad(float const width, float const height,
+           unsigned int const horizontal_split_count = 0u,
+           unsigned int const vertical_split_count = 0u,
+           std::function<int()> const &setupInstance = nullptr);
 
 //! \brief Create a sphere for a given tesselation level and make it
 //!        available to OpenGL.

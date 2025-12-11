@@ -48,6 +48,7 @@ private:
   void renderLightContribution();
   void renderFinalResult();
   void renderAllobjects(GLuint shaderProgram);
+  void renderPartical(GLuint shaderProgram);
 
   void initSkybox(); // 初始化函数
   void renderSkybox(glm::mat4 const &view,
@@ -62,7 +63,9 @@ private:
   // --- 资源 ID ---
   GLuint _fallbackShader; // 树木用的 Shader
   GLuint _grassShader;
+  GLuint _particelShader;
   GLuint _waveShader; // 地面用的 Wave Shader
+
   GLuint _tessHeightMapShader;
   GLuint _shadowMapShader;
   GLuint _gBufferShader;
@@ -84,7 +87,8 @@ private:
 
   // --- 核心数据 ---
   GLuint _instanceVBO; // 实例化矩阵缓冲
-  int _treeCount;      // 树的数量
+  GLuint _particelVBO;
+  int _treeCount; // 树的数量
   int _grassCount;
 
   // 使用 Node 存储树木的各个部分
@@ -96,6 +100,8 @@ private:
   // 地面 Node 和 Mesh
   Node _quadNode;
   bonobo::mesh_data _waveMesh; //
+  bonobo::mesh_data _particelMesh;
+  // Node _particelNode;
 
   // --- 状态变量 ---
   float _elapsedTimeS;
@@ -158,4 +164,6 @@ private:
   // control wind
   bool _isWindEnabled;
   float _windStrength;
+
+  int _particel_count;
 };
