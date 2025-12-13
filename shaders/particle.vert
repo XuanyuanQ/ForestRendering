@@ -50,11 +50,14 @@ void main() {
   v_InstanceID = gl_InstanceID;
   v_VertexID = gl_VertexID;
   vs_out.texcoord = texcoord.xy;
-  vs_out.normal = normal;
+
   mat4 instanceMatrix =
       mat4(instanceMatrix1, instanceMatrix2, instanceMatrix3, instanceMatrix4);
   vec4 model_pos =
       vertex_model_to_world * instanceMatrix * vec4(in_position * 0.05, 1.0);
+  vs_out.normal = (transpose(inverse(vertex_model_to_world * instanceMatrix)) *
+                   vec4(normal, 0.0))
+                      .rgb;
   float wave1 =
       waveFun(1.0, 1.0, 0.2, 0.5, 2.0, vec2(-1.0, 0.0), model_pos.xyz);
   float wave2 =
@@ -85,7 +88,8 @@ void main() {
   // --- 3. 计算下落动画 ---
   vec3 currentPos = startPosition;
   // Y轴：匀速下落 (也可以加上重力加速)
-  float dropSpeed = 2.0 + random(vec2(id, 4.0)) * 2.0; // 随机速度
+  float dropSpeed =
+      pow(0.8 * random(vec2(id, 4.0)), 2.0) * u_Time + 1.0; // 随机速度
   currentPos.y -= lifePhase * leafLifeSpan * dropSpeed;
   float new_height = model_pos.y + currentPos.y;
   vec3 CalPos = model_pos.xyz + currentPos;

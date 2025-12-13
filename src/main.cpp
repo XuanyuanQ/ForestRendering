@@ -34,7 +34,7 @@ int main() {
   bonobo::init();
 
   // 场景初始化
-  if (!scene.setup()) {
+  if (!scene.setup(window)) {
     return EXIT_FAILURE;
   }
 

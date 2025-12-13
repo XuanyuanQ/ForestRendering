@@ -119,8 +119,8 @@ void main() {
   float shininess = 30.0;
   float specularStrength = 0.3;
   vec4 albedoTexture = texture(txture, fs_in.texcoord);
-  vec3 stayGreen = vec3(0.8, 1.05, 0.8);
-  vec3 turnOrange = vec3(1.4, 1.1, 0.3);
+  vec3 stayGreen = vec3(0.8, 0.8, 0.6);
+  vec3 turnOrange = vec3(1.4, 0.6, 0.3);
   vec3 turnRed = vec3(1.6, 0.3, 0.2);
   // 应用颜色
   albedoTexture.rgb *= adjustLeavesCol(stayGreen, turnOrange, turnRed);
@@ -133,5 +133,5 @@ void main() {
   vec3 V = normalize(fs_in.fV);
   calculateTrees(shininess, specularStrength, albedoTexture, L, V, finalNormal,
                  ambient, diffuse, specular);
-  frag_color = vec4(diffuse + ambient + specular, 1.0);
+  frag_color = vec4(ambient + diffuse + specular, 1.0);
 }

@@ -37,6 +37,14 @@ flat in int v_InstanceID;
 flat in int v_VertexID;
 out vec4 frag_color;
 
+vec3 ACESFilm(vec3 x) {
+  float a = 2.51f;
+  float b = 0.03f;
+  float c = 2.43f;
+  float d = 0.59f;
+  float e = 0.14f;
+  return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0f, 1.0f);
+}
 vec3 getSunColor(float sunHeight) {
   vec3 noonSun = vec3(1.0, 0.98, 0.9);
   vec3 sunsetSun = vec3(1.0, 0.4, 0.1);
@@ -58,7 +66,7 @@ vec3 getSunColor(float sunHeight) {
     sunColor = nightSun;
   }
   float factor = pow(150, sunHeight * 0.6 + 1.0);
-  return sunColor * factor;
+  return sunColor;
 }
 
 void calculateGrass(in vec4 albedoTexture, in vec3 L, in vec3 V, in vec3 N,
@@ -111,11 +119,25 @@ void calculateGrass(in vec4 albedoTexture, in vec3 L, in vec3 V, in vec3 N,
   float spec = pow(max(dot(V, R), 0.0), 10.0);
   specular = spec * sunColor * 0.1; // 强度很低
 
-  ambient = ambient * 0.4;
-  diffuse = diffuse * 0.3;
-  specular = vec3(0.0, 0.38, 0.0) * 0.1; // 暂时规避加上specular无阴影
+  if (sunHeight > -0.1) {
+    diffuse = diffuse * 0.3;
+    specular = vec3(0.0, 0.38, 0.0) * 0.1; // 暂时规避加上specular无阴影
+  }
 }
 
+vec3 calculateTrans(in vec4 albedoTexture, in vec3 L, in vec3 V, in vec3 N) {
+  float distortion = 0.1;
+  float power = 4.0;
+  float scale = 0.1;
+  vec3 sunCol = getSunColor(L.y);
+  vec3 distortedLightVector = normalize(-L + N * distortion);
+
+  float translucencyDot = max(0.0, dot(V, distortedLightVector));
+
+  // 3. 应用聚焦度和强度
+  float translucencyIntensity = pow(translucencyDot, power) * scale;
+  return translucencyIntensity * sunCol;
+}
 // --------------------------------------
 // 地形光照计算
 // --------------------------------------
@@ -231,9 +253,12 @@ void calculateTerrain(in vec4 albedoTexture, in vec3 L, in vec3 V, in vec3 N,
   // C. 高光
   float spec = pow(max(dot(V, R), 0.0), 50.0); // shininess 设为 5.0
   specular = spec * sunColor * 0.1;            // 强度设为 0.1
-  ambient = ambient * 0.4;
-  diffuse = diffuse * 0.3;
-  specular = vec3(0.5, 0.38, 0.2) * 0.1; // 暂时规避加上specular无阴影
+
+  if (sunHeight > -0.1) {
+    ambient = ambient * 0.4;
+    diffuse = diffuse * 0.3;
+    specular = vec3(0.5, 0.38, 0.2) * 0.1; // 暂时规避加上specular无阴影
+  }
 }
 
 float calculateLight(vec3 world_pos, mat4 light_projection,
@@ -254,7 +279,7 @@ float calculateLight(vec3 world_pos, mat4 light_projection,
   float current_depth = projCoords.z;
 
   // 4. 计算 Bias (根据你的场景调整，0.005 对于正交投影通常是安全的)
-  float bias = 0.005;
+  float bias = 0.005 / clip_pos.w;
 
   float shadow_sum = 0.0;
 
@@ -360,30 +385,13 @@ float GetAdaptiveIntensity(vec3 currentPos, vec3 sunDir, vec3 rayDir) {
   return heightAtten * angleAtten;
 }
 
-// 核心计算函数
-vec3 CalculateVolumetricFog(
-    vec3 worldPos, vec3 cameraPos, vec3 sunDir,
-    vec3 sunHighIntensityColor, // 【重点】传入一个强度极高的太阳颜色
-                                // (例如原强度 * 100)
-    mat4 lightMatrix, sampler2D shadowMap, vec2 screenPos) {
-  // --- 【参数调优区】 ---
+vec3 CalculateVolumetricFog(vec3 worldPos, vec3 cameraPos, vec3 sunDir,
+                            vec3 sunHighIntensityColor, mat4 lightMatrix,
+                            sampler2D shadowMap, vec2 screenPos) {
+
   int STEPS = 32; // 步数，越多越好
   float MAX_DISTANCE = 150.0;
 
-  // 1. 雾的“绝对天花板”和“地板”高度
-  // 假设你的树高 20米。
-  float FOG_BOTTOM = 0.0; // 地面从 0 开始有雾
-  float FOG_TOP =
-      12.0; // 【关键】超过 12米（树冠中上部）彻底没雾！确保树顶不白。
-
-  // 2. 基础密度
-  float BASE_DENSITY = 0.02;
-
-  // 3. 极致的各向异性
-  // 【关键】参考图那种锋利感，需要 G 无限接近 1.0。试试 0.99甚至0.995
-  float SCATTERING_G = 0.99;
-
-  // --- 初始化射线 ---
   vec3 rayVector = worldPos - cameraPos;
   float rayLength = length(rayVector);
   vec3 rayDir = rayVector / rayLength;
@@ -395,52 +403,33 @@ vec3 CalculateVolumetricFog(
   vec3 currentPos = cameraPos + rayDir * stepLength * jitter;
 
   vec3 accumulatedLight = vec3(0.0);
-  float transmittance = 1.0;
+  float VOLUME_FOG_DENSITY = 0.1;
 
-  float cosTheta = dot(rayDir, sunDir);
-  float phaseVal = GetMiePhase(SCATTERING_G, cosTheta);
-  phaseVal = min(10, phaseVal);
+  float sunIndensity = 1.0 - smoothstep(0.2, -0.1, sunDir.y);
   float dynamicFactor = GetAdaptiveIntensity(currentPos, sunDir, rayDir);
+  sunIndensity *= dynamicFactor;
+  float lightPercent = 0.0;
+  float hitDistance = length(worldPos - cameraPos);
+
   for (int i = 0; i < STEPS; ++i) {
-    // --- 【核心改进：基于高度的密度计算】 ---
-    // 使用 smoothstep 创建一个平滑但有硬边界的雾层
-    // 低于 FOG_BOTTOM 是 1.0，高于 FOG_TOP 绝对是 0.0
-    float heightFactor = 1.0 - smoothstep(FOG_BOTTOM, FOG_TOP, currentPos.y);
-    float currentDensity = BASE_DENSITY * heightFactor;
+    vec4 clipPos = lightMatrix * vec4(currentPos, 1.0);
+    vec3 projCoords = clipPos.xyz / clipPos.w;
+    projCoords = projCoords * 0.5 + 0.5;
+    float shadow = 1.0;
+    // if (projCoords.z < 1.0 && projCoords.x > 0.0 && projCoords.x < 1.0 &&
+    //     projCoords.y > 0.0 && projCoords.y < 1.0) {
+    float closestDepth = texture(shadowMap, projCoords.xy).r;
+    // 假设 ShadowMap 背景是 1.0，物体深度 < 1.0
+    if (projCoords.z > closestDepth + 0.005 / clipPos.w)
+      shadow = 0.0; // 在阴影里
+    // }
 
-    // 只有当这里有雾，并且没被遮挡时，才计算光照
-    if (currentDensity > 0.0001) {
-      // 阴影测试 (此处省略具体实现，沿用你之前的 GetVolumetricShadow 逻辑即可)
-      // 注意需确保 ShadowMap 采样正确
-      vec4 clipPos = lightMatrix * vec4(currentPos, 1.0);
-      vec3 projCoords = clipPos.xyz / clipPos.w;
-      projCoords = projCoords * 0.5 + 0.5;
-      float shadow = 1.0;
-      if (projCoords.z < 1.0 && projCoords.x > 0.0 && projCoords.x < 1.0 &&
-          projCoords.y > 0.0 && projCoords.y < 1.0) {
-        float closestDepth = texture(shadowMap, projCoords.xy).r;
-        // 假设 ShadowMap 背景是 1.0，物体深度 < 1.0
-        if (projCoords.z > closestDepth + 0.001)
-          shadow = 0.0; // 在阴影里
-      }
-
-      if (shadow > 0.01) {
-        // 使用传入的高强度光计算
-        vec3 incomingLight = dynamicFactor * sunHighIntensityColor * shadow *
-                             transmittance * currentDensity * stepLength;
-        accumulatedLight += incomingLight * phaseVal;
-      }
-
-      // 自身衰减
-      transmittance *= exp(-currentDensity * stepLength);
-    }
-
-    if (transmittance < 0.01)
-      break;
+    lightPercent = mix(lightPercent, shadow, 1.0f / float(i + 1));
     currentPos += rayDir * stepLength;
   }
+  float absorb = exp(-hitDistance * VOLUME_FOG_DENSITY * sunIndensity);
 
-  return accumulatedLight;
+  return mix(vec3(0, 0, 0), sunHighIntensityColor, lightPercent) * absorb;
 }
 
 void main() {
@@ -468,8 +457,6 @@ void main() {
   vec2 shadowmap_texel_size = 1.0 / textureSize(shadow_texture, 0);
   float light_pcf = calculateLight(
       fs_in.world_pos.xyz, light_world_to_clip_matrix, shadowmap_texel_size);
-  vec4 clip = light_world_to_clip_matrix * vec4(fs_in.world_pos.xyz, 1.0);
-  vec3 ndc = (clip.xyz / clip.w);
 
   vec3 finalNormal;
   if (lables == 1) {
@@ -484,11 +471,11 @@ void main() {
 
     // 阶段A: 保持原本的绿色 (Tint = 1.0 表示不改变)
     // 稍微加一点点蓝绿色调，让没变色的叶子看起来更深沉
-    vec3 stayGreen = vec3(0.8, 1.05, 0.8);
+    vec3 stayGreen = vec3(0.6, 0.8, 0.8);
 
     // 阶段B: 变黄/橙色 (增加红和绿，减少蓝)
     // 这是一个明亮的金橙色
-    vec3 turnOrange = vec3(1.4, 1.1, 0.3);
+    vec3 turnOrange = vec3(0.8, 0.6, 0.3);
 
     // 阶段C: 变红色 (大幅增加红，大幅减少绿和蓝)
     // 这是一个鲜艳的枫红色
@@ -498,7 +485,7 @@ void main() {
     albedoTexture.rgb = adjustSaturation(albedoTexture.rgb, 1.1);
   } else if (lables == 2) {
     vec3 rawNormal = texture(normals_texture, fs_in.texcoord).rgb;
-    float noise = 1.2 * random(float(v_InstanceID));
+    float noise = 1.0 * random(float(v_InstanceID));
     rawNormal = rawNormal * 2.0 - 1.0;
     rawNormal.xy *= 1.2 * noise;
     finalNormal = normalize(fs_in.TBN * rawNormal);
@@ -515,9 +502,10 @@ void main() {
   }
   //   finalNormal = normalize(fs_in.normal);
   vec3 diffuse, specular, ambient;
-  diffuse = vec3(1.0);
-  specular = vec3(1.0);
-  ambient = vec3(1.0);
+  diffuse = vec3(0.0);
+  specular = vec3(0.0);
+  ambient = vec3(0.0);
+  vec3 trans = vec3(0.0);
   if (lables == 3) {
     vec3 stayGreen = vec3(0.9, 0.95, 0.6);
     vec3 turnStraw = vec3(0.5, 0.4, 0.9);
@@ -541,21 +529,27 @@ void main() {
   // --- 计算体积光 ---
 
   vec3 volumetricLight = vec3(0.0);
+  float a = 1.0;
+  float translucencyIntensity = 1.0;
   if (isVolumetricLight == 1) {
-    float a = 1.0;
-    if (lables == 2) {
-      a = 0.0;
-    }
-    if (lables == 1) {
-      a = 0.5;
-    }
+
+    // if (lables == 2) {
+    //   a = 0.1;
+    // }
+    // if (lables == 1) {
+    //   a = 0.5;
+    //   trans = light_pcf * calculateTrans(albedoTexture, L, V, finalNormal);
+    // }
     vec3 sunColor = getSunColor(L.y);
     volumetricLight =
         CalculateVolumetricFog(fs_in.world_pos, camera_position, L, sunColor,
                                light_world_to_clip_matrix, shadow_texture,
                                gl_FragCoord.xy) *
         a;
+    // volumetricLight = pow(volumetricLight, vec3(-1.0 / 2.2));
   }
-
-  frag_color = vec4(sceneColor + volumetricLight, 1.0);
+  vec3 final_color = sceneColor + volumetricLight * sceneColor * 3.0;
+  final_color = ACESFilm(final_color);
+  // final_color = pow(final_color, vec3(1.0 / 1.2));
+  frag_color = vec4(final_color, 1.0);
 }

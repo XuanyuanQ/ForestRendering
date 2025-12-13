@@ -3,7 +3,7 @@ uniform sampler2D txture_alpha;
 uniform int lables; // 0-terrain,1-leaves,2-bark,3-grass
 in VS_OUT { vec2 texcoord; }
 fs_in;
-
+out vec4 frag_color;
 void main() {
   if (lables == 3) {
     vec4 mask = texture(txture_alpha, fs_in.texcoord);
@@ -17,5 +17,6 @@ void main() {
     if (mask < 0.5)
       discard;
   }
+  frag_color = vec4(1.0);
 
 } // 写入深度即可

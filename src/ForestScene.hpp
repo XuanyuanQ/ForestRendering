@@ -11,8 +11,8 @@
 #include "core/ShaderProgramManager.hpp"
 #include "core/WindowManager.hpp"
 #include "core/node.hpp"
-#define SHADOW_WIDTH 1920
-#define SHADOW_HEIGHT 1920
+#define SHADOW_WIDTH 2048
+#define SHADOW_HEIGHT 2048
 
 struct InstanceData {
   glm::mat4 modelMatrix; // 64 bytes
@@ -23,7 +23,7 @@ public:
   ForestScene(WindowManager &windowManager);
   ~ForestScene();
 
-  bool setup();
+  bool setup(GLFWwindow *window);
   void update(double deltaTimeUs);
   void render(GLFWwindow *window);
 
@@ -43,12 +43,13 @@ private:
   void initGbuffer();
   void initLightContribution();
   void updateLightMatrix(const glm::vec3 light_pos);
-  void renderShadowMap();
+  void renderShadowMap(GLuint FBO);
   void renderGbuffer();
   void renderLightContribution();
   void renderFinalResult();
   void renderAllobjects(GLuint shaderProgram);
   void renderPartical(GLuint shaderProgram);
+  void renderFrog(GLuint shaderProgram);
 
   void initSkybox(); // 初始化函数
   void renderSkybox(glm::mat4 const &view,
@@ -64,6 +65,8 @@ private:
   GLuint _fallbackShader; // 树木用的 Shader
   GLuint _grassShader;
   GLuint _particelShader;
+  GLuint _volumetricLightShader;
+
   GLuint _waveShader; // 地面用的 Wave Shader
 
   GLuint _tessHeightMapShader;
@@ -101,6 +104,7 @@ private:
   Node _quadNode;
   bonobo::mesh_data _waveMesh; //
   bonobo::mesh_data _particelMesh;
+  bonobo::mesh_data _frogMesh;
   // Node _particelNode;
 
   // --- 状态变量 ---
@@ -166,4 +170,5 @@ private:
   float _windStrength;
 
   int _particel_count;
+  int gbufffer_w, gbufffer_h;
 };

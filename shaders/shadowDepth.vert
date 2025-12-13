@@ -9,6 +9,9 @@ layout(location = 9) in vec4 instanceMatrix3;
 layout(location = 10) in vec4 instanceMatrix4;
 
 uniform int lables;
+uniform int isGbufferDepth;
+uniform mat4 vertex_world_to_view;
+uniform mat4 vertex_view_to_projection;
 uniform mat4 vertex_model_to_world;
 
 uniform mat4 light_world_to_clip_matrix;
@@ -50,9 +53,9 @@ void main() {
   if (lables == 3) {
     scale = 0.015;
   }
-  if (lables == 1 || lables == 2) {
-    // scale = 0.4;
-  }
+  // if (lables == 1 || lables == 2) {
+  //   scale = 0.8;
+  // }
 
   float time = 1.0;
   // 计算两个波形叠加
@@ -138,6 +141,24 @@ void main() {
       break;
     }
   }
-
-  gl_Position = light_world_to_clip_matrix * vec4(world_pos, 1.0);
+  if (lables == 3) {
+    world_pos.y = -world_pos.y;
+  }
+  if (lables == 1 || lables == 2) {
+    world_pos.y += 3.0;
+  }
+  if (isGbufferDepth == 1) {
+    // gl_Position = light_world_to_clip_matrix * vec4(world_pos, 1.0);
+    gl_Position =
+        vertex_view_to_projection * vertex_world_to_view * vec4(world_pos, 1.0);
+    // gl_Position = light_world_to_clip_matrix * vec4(world_pos, 1.0);
+  } else {
+    gl_Position = light_world_to_clip_matrix * vec4(world_pos, 1.0);
+    // gl_Position =
+    //     vertex_view_to_projection * vertex_world_to_view *
+    //     vec4(world_pos, 1.0);
+  }
+  // gl_Position =
+  //     vertex_view_to_projection * vertex_world_to_view1 *
+  //     vec4(world_pos, 1.0);
 }

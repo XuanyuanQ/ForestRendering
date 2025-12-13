@@ -85,7 +85,7 @@ void main() {
   float sunMask = step(0.999, sunDot);
 
   vec3 skyColor = mix(skyHoriz, skyTop, gradient) * (1 - sunMask);
-
+  // skyColor = vec3(0.0) * (1 - sunMask);
   // 太阳颜色 (亮黄白)
 
   // 叠加太阳 (只在白天和日落显示)

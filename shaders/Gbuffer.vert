@@ -77,6 +77,9 @@ void main() {
   if (lables == 3) {
     scale = 0.008;
   }
+  // if ( == 1 || lables == 2) {
+  //   scale = 0.8;
+  // }lables
 
   vs_out.normal = vec3(vs_out.normal_model_to_world * vec4(normal, 0.0));
 
@@ -104,15 +107,15 @@ void main() {
     // float wind = instanceWindsSpeed * wind_strength;
 
     float wind =
-        wind_strength * random(float(v_VertexID)) * cos(float(v_VertexID));
+        wind_strength * random(float(v_InstanceID)) * cos(float(v_VertexID));
     vec3 windDir = normalize(vec3(1.0, 0.0, 0.5)); // 统一风向
     switch (lables) {
     case 3: // Grass
     {
       float wave =
           sin(elapsed_time_s * 3.0 + world_pos.x * 2.0 + world_pos.z * 1.0);
-      world_pos.x += wave * wind * 0.2;
-      world_pos.z += cos(elapsed_time_s * 2.5 + world_pos.x * 3.0) * wind * 0.1;
+      world_pos.x += wave * wind * 2;
+      world_pos.z += cos(elapsed_time_s * 2.5 + world_pos.x * 3.0) * wind * 1;
       break;
     }
 
@@ -191,4 +194,7 @@ void main() {
 
   gl_Position =
       vertex_view_to_projection * vertex_world_to_view * vec4(world_pos, 1.0);
+  // if ((v_InstanceID * 25 + v_VertexID) % 15 == 0 && lables == 1) {
+  //   gl_Position = vec4(0.0, 0.0, 0.0, 0.0);
+  // }
 }

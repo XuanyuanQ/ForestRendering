@@ -4,6 +4,7 @@
 #include "core/parametric_shapes.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/string_cast.hpp>
 #include <imgui.h>
 #include <random>
 
@@ -251,73 +252,6 @@ void ForestScene::updateLightMatrix(const glm::vec3 light_pos) {
 
   light_world_to_clip_matrix = lightProjection * lightView;
 }
-void ForestScene::initGbuffer() {
-  glGenFramebuffers(1, &gbufferFBO);
-  glBindFramebuffer(GL_FRAMEBUFFER, gbufferFBO);
-
-  const unsigned int WIDTH = SHADOW_WIDTH;
-  const unsigned int HEIGHT = SHADOW_HEIGHT;
-
-  // --- 1. Diffuse
-  // glGenTextures(1, &gDiffuse);
-  // glBindTexture(GL_TEXTURE_2D, gDiffuse);
-  // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, WIDTH, HEIGHT, 0, GL_RGBA,
-  //              GL_UNSIGNED_BYTE, nullptr);
-  // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  // glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-  //                        gDiffuse, 0);
-
-  // // --- 2. Specular
-  // glGenTextures(1, &gSpecular);
-  // glBindTexture(GL_TEXTURE_2D, gSpecular);
-  // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, WIDTH, HEIGHT, 0, GL_RGBA,
-  //              GL_UNSIGNED_BYTE, nullptr);
-  // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  // glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D,
-  //                        gSpecular, 0);
-
-  // // --- 3. Normal (float, high precision)
-  // glGenTextures(1, &gNormal);
-  // glBindTexture(GL_TEXTURE_2D, gNormal);
-  // glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, WIDTH, HEIGHT, 0, GL_RGBA,
-  //              GL_FLOAT, nullptr);
-  // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  // glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D,
-  //                        gNormal, 0);
-
-  // // --- 4. Object Type (integer buffer)
-  // glGenTextures(1, &gObjectType);
-  // glBindTexture(GL_TEXTURE_2D, gObjectType);
-  // glTexImage2D(GL_TEXTURE_2D, 0, GL_R32I, WIDTH, HEIGHT, 0, GL_RED_INTEGER,
-  //              GL_INT, nullptr);
-  // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  // glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D,
-  //                        gObjectType, 0);
-
-  // // --- 5. Depth
-  // glGenTextures(1, &gDepth);
-  // glBindTexture(GL_TEXTURE_2D, gDepth);
-  // glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, WIDTH, HEIGHT, 0,
-  //              GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-  // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  // glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D,
-  //                        gDepth, 0);
-
-  // // Set draw buffers
-  // GLenum attachments[4] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1,
-  //                          GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3};
-  // glDrawBuffers(4, attachments);
-
-  if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-    std::cerr << "GBuffer not complete!" << std::endl;
-
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
 
 void ForestScene::initLightContribution() {
 
@@ -393,6 +327,56 @@ void ForestScene::initLightContribution() {
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
+void ForestScene::initGbuffer() {
+
+  glGenFramebuffers(1, &gbufferFBO);
+  glBindFramebuffer(GL_FRAMEBUFFER, gbufferFBO);
+
+  // ---------------------------------------------
+  // 2. 创建并配置 深度纹理 (核心部分)
+  // ---------------------------------------------
+  glGenTextures(1, &gDepth);
+  glBindTexture(GL_TEXTURE_2D, gDepth);
+
+  // 【关键点 1】格式选择
+  // 使用 GL_DEPTH_COMPONENT32F (32位浮点)。
+  // 相比 24位整数，浮点深度在远距离重建世界坐标时精度更高，减少波纹。
+  glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, gbufffer_w, gbufffer_h, 0,
+               GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+
+  // 【关键点 2】过滤方式 (Filtering)
+  // 必须使用 GL_NEAREST！
+  // 也就是"最近邻采样"。如果你用 GL_LINEAR，显卡会在物体边缘插值，
+  // 导致你算出"半个物体"的深度，这在体积光重建时会产生严重的白色光晕。
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+  // 【关键点 3】环绕方式 (Wrapping)
+  // 使用 GL_CLAMP_TO_EDGE，防止采样到屏幕以外的数据。
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+  // 【关键点 4】比较模式 (Compare Mode)
+  // 显式设置为 GL_NONE。
+  // 这告诉显卡："把这当成一张普通图，我要读里面的 float 值"，
+  // 而不要像 Shadow Map 那样去做 (Depth > ref) 的比较运算。
+  // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_NONE);
+
+  // 将纹理绑定到 FBO 的深度附件点
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D,
+                         gDepth, 0);
+  glReadBuffer(GL_NONE);
+  // ---------------------------------------------
+  // 4. 检查完整性
+  // ---------------------------------------------
+  if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!"
+              << std::endl;
+
+  // 解绑，以免不小心画进去了
+  glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
 void ForestScene::initShadowMap() {
   // 1. 创建 FBO
   glGenFramebuffers(1, &shadowFBO);
@@ -435,6 +419,56 @@ void ForestScene::initShadowMap() {
     std::cout << "ShadowMap FBO Error!" << std::endl;
 
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void ForestScene::renderFrog(GLuint shaderProgram) {
+  glDisable(GL_CULL_FACE);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glUseProgram(shaderProgram);
+  glm::mat4 model = glm::mat4(1.0f);
+  // model = glm::rotate(model, glm::radians(-90.f), glm::vec3(1.0f, 0.0f,
+  // 0.0f));
+  glUniformMatrix4fv(
+      glGetUniformLocation(shaderProgram, "vertex_model_to_world"), 1, GL_FALSE,
+      glm::value_ptr(model));
+  glUniformMatrix4fv(
+      glGetUniformLocation(shaderProgram, "vertex_world_to_view"), 1, GL_FALSE,
+      glm::value_ptr(_camera.GetWorldToViewMatrix()));
+  glUniformMatrix4fv(
+      glGetUniformLocation(shaderProgram, "vertex_view_to_projection"), 1,
+      GL_FALSE, glm::value_ptr(_camera.GetViewToClipMatrix()));
+  glUniformMatrix4fv(
+      glGetUniformLocation(shaderProgram, "light_world_to_clip_matrix"), 1,
+      GL_FALSE, glm::value_ptr(light_world_to_clip_matrix));
+  glUniform3fv(glGetUniformLocation(shaderProgram, "light_position"), 1,
+               glm::value_ptr(_lightPosition));
+  glUniform3fv(glGetUniformLocation(shaderProgram, "camera_position"), 1,
+               glm::value_ptr(_camera.mWorld.GetTranslation()));
+  glUniform2f(glGetUniformLocation(shaderProgram, "inverse_screen_resolution"),
+              1.0f / static_cast<float>(gbufffer_w),
+              1.0f / static_cast<float>(gbufffer_h));
+  glUniform3fv(glGetUniformLocation(shaderProgram, "light_direction"), 1,
+               glm::value_ptr(lightgeometry.get_transform().GetFront()));
+  glUniform1i(glGetUniformLocation(shaderProgram, "isApplyShadow"),
+              _applyShadow);
+  glUniform1i(glGetUniformLocation(shaderProgram, "isVolumetricLight"),
+              _isVolumetricLight);
+
+  glActiveTexture(GL_TEXTURE11);
+  glBindTexture(GL_TEXTURE_2D, gDepth);
+  glUniform1i(glGetUniformLocation(shaderProgram, "depth_texture"), 11);
+  glActiveTexture(GL_TEXTURE10);
+  glBindTexture(GL_TEXTURE_2D, shadowMap);
+  glUniform1i(glGetUniformLocation(shaderProgram, "shadow_texture"), 10);
+
+  // glBindVertexArray(_frogMesh.vao);
+
+  // glDrawElements(GL_TRIANGLES, _frogMesh.indices_nb, GL_UNSIGNED_INT,
+  //                reinterpret_cast<GLvoid const *>(0x0));
+  glBindVertexArray(fullScreenVAO);
+  glDrawArrays(GL_TRIANGLES, 0, 3);
+  glBindVertexArray(0u);
+  // glBindVertexArray(0);
 }
 
 void ForestScene::renderPartical(GLuint shaderProgram) {
@@ -638,11 +672,7 @@ void ForestScene::renderAllobjects(GLuint shaderProgram) {
 }
 
 void ForestScene::renderGbuffer() {
-  // glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
-  // glBindFramebuffer(GL_FRAMEBUFFER, gbufferFBO);
-  // glClearDepthf(1.0f);
-  // glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-  // glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+
   glUseProgram(_gBufferShader);
   {
 
@@ -674,6 +704,7 @@ void ForestScene::renderGbuffer() {
     glBindTexture(GL_TEXTURE_2D, shadowMap);
     glUniform1i(glGetUniformLocation(_gBufferShader, "shadow_texture"), 10);
     // rendtest(_gBufferShader);
+
     renderAllobjects(_gBufferShader);
   }
   // glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -682,20 +713,18 @@ void ForestScene::renderGbuffer() {
   glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-void ForestScene::renderShadowMap() {
-
+void ForestScene::renderShadowMap(GLuint FBO) {
   glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
-  glBindFramebuffer(GL_FRAMEBUFFER, shadowFBO);
+  if (FBO == gbufferFBO) { // 耦合....
+    glViewport(0, 0, gbufffer_w, gbufffer_h);
+  }
+  // glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
+  glBindTexture(GL_TEXTURE_2D, 0);
+  glBindFramebuffer(GL_FRAMEBUFFER, FBO);
+  glUseProgram(_shadowMapShader);
+  // glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glEnable(GL_DEPTH_TEST);
-
-  // 2. 【核选项】重置所有状态，确保 Clear 必须执行
-  // glDisable(GL_SCISSOR_TEST);                      // 关剪裁
-  // glDisable(GL_BLEND);                             // 关混合
-  // glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE); //
-  // 打开颜色写入(虽然不需要) glDepthMask(GL_TRUE); // 打开深度写入(必须)
-  // glStencilMask(0xFF);                             // 打开模板写入(如果有)
-
-  // 【3. 清除为白色 (1.0)】
+  glDisable(GL_CULL_FACE);
   glClearDepth(1.0f);
   // glClearColor(1.0f, 0.0f, 0.0f, 1.0f);
   glClear(GL_DEPTH_BUFFER_BIT);
@@ -704,14 +733,31 @@ void ForestScene::renderShadowMap() {
   }
   // std::cout << "ShadowMap Size: " << SHADOW_WIDTH << " x " << SHADOW_HEIGHT
   //           << std::endl;
-  glUseProgram(_shadowMapShader);
+
   // renderPartical(_particelShader);
-  // glEnable(GL_CULL_FACE);
+
   // glCullFace(GL_FRONT);
+
+  bool isGbufferDepth = false;
+  if (FBO == gbufferFBO) { // 耦合....
+    isGbufferDepth = true;
+  }
+
+  glUniform1i(glGetUniformLocation(_shadowMapShader, "isGbufferDepth"),
+              int(isGbufferDepth));
 
   glUniformMatrix4fv(
       glGetUniformLocation(_shadowMapShader, "light_world_to_clip_matrix"), 1,
       GL_FALSE, glm::value_ptr(light_world_to_clip_matrix));
+  glm::mat4 viewMat = _camera.GetWorldToViewMatrix();
+  glm::mat4 projMat = _camera.GetViewToClipMatrix();
+
+  glUniformMatrix4fv(
+      glGetUniformLocation(_shadowMapShader, "vertex_world_to_view"), 1,
+      GL_FALSE, glm::value_ptr(viewMat));
+  glUniformMatrix4fv(
+      glGetUniformLocation(_shadowMapShader, "vertex_view_to_projection"), 1,
+      GL_FALSE, glm::value_ptr(_camera.GetViewToClipMatrix()));
 
   renderAllobjects(_shadowMapShader);
   // rendtest(_shadowMapShader);
@@ -796,7 +842,7 @@ void ForestScene::renderLightContribution() {
   glBindTexture(GL_TEXTURE_2D, 0);
 }
 
-bool ForestScene::setup() {
+bool ForestScene::setup(GLFWwindow *window) {
 
   // ----------------------------------------------------------------
   // 1. 加载 Shader
@@ -887,6 +933,15 @@ bool ForestScene::setup() {
     LogError("Failed to load _particelShader shader");
     return -1;
   }
+  _programManager.CreateAndRegisterProgram(
+      "_volumetricLightShader",
+      {{ShaderType::vertex, "volumetricLight.vert"},
+       {ShaderType::fragment, "volumetricLight.frag"}},
+      _volumetricLightShader);
+  if (_volumetricLightShader == 0u) {
+    LogError("Failed to load volumetricLight shader");
+    return -1;
+  }
   GLuint tessHeightMapShader;
   _programManager.CreateAndRegisterProgram(
       "tessHeightMap",
@@ -909,7 +964,8 @@ bool ForestScene::setup() {
   // 2. 准备 Instancing VBO Setup 函数
   // ----------------------------------------------------------------
   // 先生成矩阵数据
-  std::vector<InstanceData> instances = generateTreeTransforms(_treeCount);
+  std::vector<InstanceData> instances =
+      generateTreeTransforms(_treeCount, 100, 100);
 
   // 把矩阵上传到 VBO
   glGenBuffers(1, &_instanceVBO);
@@ -993,6 +1049,7 @@ bool ForestScene::setup() {
   glBindBuffer(GL_ARRAY_BUFFER, 0); // 解绑
   _particelMesh =
       parametric_shapes::createQuad(100.0f, 100.0f, 10, 10, particelVBO);
+  _frogMesh = parametric_shapes::createQuad(100.0f, 100.0f, 1, 1);
 
   std::vector<bonobo::mesh_data> grass_meshes = bonobo::loadObjects(
       config::resources_path("91-trava-kolosok/TravaKolosok.obj"),
@@ -1132,8 +1189,9 @@ bool ForestScene::setup() {
   glBindVertexArray(fullScreenVAO);
   // createLight();
 
-  // initGbuffer();
+  glfwGetFramebufferSize(window, &gbufffer_w, &gbufffer_h);
   initShadowMap();
+  initGbuffer();
   // initLightContribution();
   lightgeometry.set_program(&_lightContributionShader, light_uniforms);
 
@@ -1219,16 +1277,25 @@ void ForestScene::render(GLFWwindow *window) {
     //                 _grassCount);
   }
   // lightgeometry.render(_camera.GetWorldToClipMatrix(), glm::mat4(1.0f));
-
-  renderShadowMap();
-
+  // glViewport(0, 0, w, h);
+  renderShadowMap(shadowFBO);
+  // renderShadowMap(gbufferFBO);
   glViewport(0, 0, w, h);
   // simulationForest(_forestTestShader);//世界坐标原点，太阳指向方向
   // simulationSun(_sunTestShader);//模拟太阳位置
+  // glViewport(0, 0, w, h);
   renderSkybox(_camera.GetWorldToViewMatrix(), _camera.GetViewToClipMatrix());
   renderGbuffer();
   renderPartical(_particelShader);
+  glEnable(GL_BLEND);
 
+  glBlendFunc(GL_ONE, GL_ONE);
+
+  // 3. 锁定深度写入 (雾不应该遮挡深度)
+  glDepthMask(GL_FALSE);
+  // renderFrog(_volumetricLightShader);
+  glDisable(GL_BLEND);
+  glDepthMask(GL_TRUE);
   // renderLightContribution();
   // renderFinalResult();
   // 恢复 Cull Mode
