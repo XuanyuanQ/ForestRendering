@@ -77,6 +77,9 @@ void main() {
   if (lables == 3) {
     scale = 0.008;
   }
+  // if (lables == 0) {
+  //   scale = 3.0;
+  // }
   // if ( == 1 || lables == 2) {
   //   scale = 0.8;
   // }lables

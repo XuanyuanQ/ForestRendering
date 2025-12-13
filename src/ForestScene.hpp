@@ -131,9 +131,9 @@ private:
   float _daySpeed; // 太阳移动速度
   bool _applyShadow;
   bool _isVolumetricLight;
-  float lightX{3.0f};
-  float lightY{14.0f};
-  float lightZ{11.0f};
+  float lightX{-52.8f};
+  float lightY{50.4f};
+  float lightZ{100.0f};
 
   // shadow
   GLuint shadowFBO;

@@ -237,12 +237,12 @@ void ForestScene::updateLightMatrix(const glm::vec3 light_pos) {
   // 假设你的树高十几米，试着把范围设为 100 或 150。
   // 如果分辨率是 1024，boxSize=100 时，精度约为 200m/1024 ≈ 0.2米(20厘米)，
   // 这已经能表现出树枝和一大簇树叶的形状了。
-  float boxSize = 50.0f;
+  float boxSize = 250.0f;
 
   // Near/Far 平面保持足够大即可
   // float nearPlane = 1.0f;
   // float farPlane = 3000.0f;
-  float nearPlane = 1.0f, farPlane = 100.5f;
+  float nearPlane = 1.0f, farPlane = 1000.5f;
   auto lightProjection =
       glm::ortho(-boxSize, boxSize, -boxSize, boxSize, nearPlane, farPlane);
 
@@ -1224,10 +1224,14 @@ void ForestScene::update(double deltaTimeUs) {
   // 利用 sin/cos 让太阳绕 Z 轴旋转 (模拟东升西落)
   // 假设太阳从 X 正方向(东)升起，到 Y 正方向(正午)，落向 X 负方向(西)
   // timeOffset 用来调整初始时间，让程序一开始是白天
-  //   _lightPosition.x = sin(_sunTime) * sunRadius; // 东西移动
-  //   _lightPosition.y = cos(_sunTime) * sunRadius; // 上下移动
-  //   _lightPosition.z = 10.0f; // 稍微偏南或偏北一点，产生好看的阴影角度
-  _lightPosition = glm::vec3(lightX, lightY, lightZ);
+  if (!_isPaused) {
+    _lightPosition.x = sin(_sunTime) * sunRadius; // 东西移动
+    _lightPosition.y = cos(_sunTime) * sunRadius; // 上下移动
+    _lightPosition.z = -100.0f; // 稍微偏南或偏北一点，产生好看的阴影角度
+  } else {
+    _lightPosition = glm::vec3(lightX, lightY, lightZ);
+  }
+
   updateLightMatrix(_lightPosition);
   // lightgeometry.get_transform().SetTranslate(_lightPosition);
 
@@ -1279,9 +1283,9 @@ void ForestScene::render(GLFWwindow *window) {
   // lightgeometry.render(_camera.GetWorldToClipMatrix(), glm::mat4(1.0f));
   // glViewport(0, 0, w, h);
   renderShadowMap(shadowFBO);
-  // renderShadowMap(gbufferFBO);
+  renderShadowMap(gbufferFBO);
   glViewport(0, 0, w, h);
-  // simulationForest(_forestTestShader);//世界坐标原点，太阳指向方向
+  // simulationForest(_forestTestShader); // 世界坐标原点，太阳指向方向
   // simulationSun(_sunTestShader);//模拟太阳位置
   // glViewport(0, 0, w, h);
   renderSkybox(_camera.GetWorldToViewMatrix(), _camera.GetViewToClipMatrix());

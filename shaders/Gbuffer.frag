@@ -390,12 +390,13 @@ vec3 CalculateVolumetricFog(vec3 worldPos, vec3 cameraPos, vec3 sunDir,
                             sampler2D shadowMap, vec2 screenPos) {
 
   int STEPS = 32; // 步数，越多越好
-  float MAX_DISTANCE = 150.0;
+  float MAX_DISTANCE = 250.0;
 
   vec3 rayVector = worldPos - cameraPos;
   float rayLength = length(rayVector);
   vec3 rayDir = rayVector / rayLength;
   float targetDistance = min(rayLength, MAX_DISTANCE);
+  targetDistance = rayLength;
   float stepLength = targetDistance / float(STEPS);
 
   // Dithering 抖动
@@ -410,26 +411,29 @@ vec3 CalculateVolumetricFog(vec3 worldPos, vec3 cameraPos, vec3 sunDir,
   sunIndensity *= dynamicFactor;
   float lightPercent = 0.0;
   float hitDistance = length(worldPos - cameraPos);
-
   for (int i = 0; i < STEPS; ++i) {
     vec4 clipPos = lightMatrix * vec4(currentPos, 1.0);
     vec3 projCoords = clipPos.xyz / clipPos.w;
-    projCoords = projCoords * 0.5 + 0.5;
+    projCoords.xy = projCoords.xy * 0.5 + 0.5;
     float shadow = 1.0;
     // if (projCoords.z < 1.0 && projCoords.x > 0.0 && projCoords.x < 1.0 &&
     //     projCoords.y > 0.0 && projCoords.y < 1.0) {
-    float closestDepth = texture(shadowMap, projCoords.xy).r;
+    float closestDepth = texture(shadowMap, projCoords.xy).r * 2.0 - 1.0;
     // 假设 ShadowMap 背景是 1.0，物体深度 < 1.0
-    if (projCoords.z > closestDepth + 0.005 / clipPos.w)
+    if (projCoords.z > closestDepth + 0.0005) {
       shadow = 0.0; // 在阴影里
+    }
     // }
 
-    lightPercent = mix(lightPercent, shadow, 1.0f / float(i + 1));
+    // lightPercent = mix(lightPercent, shadow, 1.0f / float(i + 1));
+    lightPercent += shadow;
     currentPos += rayDir * stepLength;
   }
-  float absorb = exp(-hitDistance * VOLUME_FOG_DENSITY * sunIndensity);
 
-  return mix(vec3(0, 0, 0), sunHighIntensityColor, lightPercent) * absorb;
+  float absorb = exp(-hitDistance * VOLUME_FOG_DENSITY * sunIndensity);
+  // return vec3(shadow);
+  return mix(vec3(0, 0, 0), sunHighIntensityColor, min(5, lightPercent)) *
+         absorb;
 }
 
 void main() {
@@ -548,8 +552,18 @@ void main() {
         a;
     // volumetricLight = pow(volumetricLight, vec3(-1.0 / 2.2));
   }
-  vec3 final_color = sceneColor + volumetricLight * sceneColor * 3.0;
+  float diff = max(dot(L, finalNormal), 0.0);
+  vec3 R = reflect(-L, finalNormal);
+  float spec = pow(max(dot(V, R), 0.0), 50.0);
+  vec3 final_color = sceneColor + volumetricLight * (sceneColor);
   final_color = ACESFilm(final_color);
   // final_color = pow(final_color, vec3(1.0 / 1.2));
-  frag_color = vec4(final_color, 1.0);
+
+  if (isApplyShadow == 1 && isVolumetricLight == 1) {
+    frag_color = vec4(final_color, 1.0);
+  } else if (isVolumetricLight == 1) {
+    frag_color = vec4(volumetricLight, 1.0);
+  } else {
+    frag_color = vec4(sceneColor, 1.0);
+  }
 }
