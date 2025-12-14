@@ -21,7 +21,7 @@ vec3 adjustSaturation(vec3 color, float saturation) {
   return mix(vec3(grey), color, saturation);
 }
 
-vec3 adjustLeavesCol(vec3 stayGreen, vec3 turnOrange, vec3 turnRed) {
+float adjustLeavesCol(vec3 stayGreen, vec3 turnOrange, vec3 turnRed) {
 
   float noise = 1.2 * random(float(v_InstanceID));
 

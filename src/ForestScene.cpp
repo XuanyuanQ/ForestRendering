@@ -22,7 +22,7 @@ ForestScene::ForestScene(WindowManager &windowManager)
   _camera.mWorld.SetTranslate(glm::vec3(0.0f, 10.0f, 20.0f));
   _camera.mMouseSensitivity = glm::vec2(0.003f);
   _camera.mMovementSpeed = glm::vec3(3.0f);
-  _particel_count = 50;
+  _particel_count = 150;
   _treeCount = 15;
   _grassCount = 100;
   _elapsedTimeS = 0.0f;
@@ -167,41 +167,6 @@ ForestScene::generateTreeTransforms(int count, int Width, int Depth) {
   }
   return InstanceDatas;
 }
-
-std::vector<InstanceData> ForestScene::generateParticleTransforms(int count){
-	std::vector<InstanceData> particel_matrices;
-	particel_matrices.reserve(count);
-
-	for (int i = 0; i < count; i++) {
-		glm::mat4 model = glm::mat4(1.0f);
-
-		// X, Z: 范围 -50 到 50
-		float x = ((rand() % 1000) / 1000.0f * 100.0f) - 50.0f;
-		float z = ((rand() % 1000) / 1000.0f * 100.0f) - 50.0f;
-		
-		// Y (高度): 从 5米 到 15米 高空落下
-		float y = 5.0f + ((rand() % 1000) / 1000.0f) * 10.0f;
-		
-		model = glm::translate(model, glm::vec3(x, y, z));
-
-		// scale (1.0 ~ 2.5)
-		float scale = 1.0f + ((rand() % 1500) / 1000.0f);
-		model = glm::scale(model, glm::vec3(scale));
-
-		// 随机旋转
-		float rotAngle = static_cast<float>(rand() % 360);
-		model = glm::rotate(model, glm::radians(rotAngle), glm::vec3(1.0f, 1.0f, 1.0f));
-
-		InstanceData data;
-		data.modelMatrix = model;
-		data.windSpeed = (float)rand() / RAND_MAX;
-
-		particel_matrices.push_back(data);
-	}
-	
-	return particel_matrices;
-}
-
 void ForestScene::simulationSun(GLuint shaderProgram) {
   glUseProgram(shaderProgram);
   glm::mat4 model = glm::mat4(1.0f);
@@ -507,50 +472,44 @@ void ForestScene::renderFrog(GLuint shaderProgram) {
 }
 
 void ForestScene::renderPartical(GLuint shaderProgram) {
-	glUseProgram(shaderProgram);
-	  glDisable(GL_CULL_FACE);
+  glUseProgram(shaderProgram);
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(GL_TEXTURE_2D, _texLeaf);
+  glUniform1i(glGetUniformLocation(shaderProgram, "txture"), 0);
 
-	  glActiveTexture(GL_TEXTURE0);
-	  glBindTexture(GL_TEXTURE_2D, _texLeaf);
-	  glUniform1i(glGetUniformLocation(shaderProgram, "txture"), 0);
+  glActiveTexture(GL_TEXTURE1);
+  glBindTexture(GL_TEXTURE_2D, _texLeafMask);
+  glUniform1i(glGetUniformLocation(shaderProgram, "mask"), 1);
 
-	  glActiveTexture(GL_TEXTURE1);
-	  glBindTexture(GL_TEXTURE_2D, _texLeafMask);
-	  glUniform1i(glGetUniformLocation(shaderProgram, "mask"), 1);
+  glm::mat4 model = glm::mat4(1.0f);
+  // model = glm::translate(model, _lightPosition);
+  glUniformMatrix4fv(
+      glGetUniformLocation(shaderProgram, "vertex_model_to_world"), 1, GL_FALSE,
+      glm::value_ptr(model));
+  glUniformMatrix4fv(
+      glGetUniformLocation(shaderProgram, "vertex_world_to_view"), 1, GL_FALSE,
+      glm::value_ptr(_camera.GetWorldToViewMatrix()));
 
-	  glm::mat4 model = glm::mat4(1.0f);
-	  glUniformMatrix4fv(
-		  glGetUniformLocation(shaderProgram, "vertex_model_to_world"), 1, GL_FALSE,
-		  glm::value_ptr(model));
-	  glUniformMatrix4fv(
-		  glGetUniformLocation(shaderProgram, "vertex_world_to_view"), 1, GL_FALSE,
-		  glm::value_ptr(_camera.GetWorldToViewMatrix()));
+  glUniformMatrix4fv(
+      glGetUniformLocation(shaderProgram, "vertex_view_to_projection"), 1,
+      GL_FALSE, glm::value_ptr(_camera.GetViewToClipMatrix()));
+  glm::vec3 u_TreeCrownCenter(20.0f, 43.0f, 20.0f);
+  glUniform1f(glGetUniformLocation(shaderProgram, "u_Time"), _elapsedTimeS);
+  glUniform3fv(glGetUniformLocation(shaderProgram, "u_TreeCrownCenter"), 1,
+               glm::value_ptr(u_TreeCrownCenter));
+  glm::vec3 u_TreeCrownSize(10.0f, 20.0f, 10.0f);
+  glUniform3fv(glGetUniformLocation(shaderProgram, "u_TreeCrownSize"), 1,
+               glm::value_ptr(u_TreeCrownSize));
 
-	  glUniformMatrix4fv(
-		  glGetUniformLocation(shaderProgram, "vertex_view_to_projection"), 1,
-		  GL_FALSE, glm::value_ptr(_camera.GetViewToClipMatrix()));
+  glUniform3fv(glGetUniformLocation(shaderProgram, "light_position"), 1,
+               glm::value_ptr(_lightPosition));
+  glUniform3fv(glGetUniformLocation(shaderProgram, "camera_position"), 1,
+               glm::value_ptr(_camera.mWorld.GetTranslation()));
 
-	  //调整粒子生成范围 (Uniforms)
-	  glm::vec3 u_TreeCrownCenter(0.0f, 15.0f, 0.0f);
-	  glm::vec3 u_TreeCrownSize(100.0f, 20.0f, 100.0f);
-
-	  glUniform1f(glGetUniformLocation(shaderProgram, "u_Time"), _elapsedTimeS);
-	  glUniform3fv(glGetUniformLocation(shaderProgram, "u_TreeCrownCenter"), 1,
-				   glm::value_ptr(u_TreeCrownCenter));
-	  glUniform3fv(glGetUniformLocation(shaderProgram, "u_TreeCrownSize"), 1,
-				   glm::value_ptr(u_TreeCrownSize));
-
-	  glUniform3fv(glGetUniformLocation(shaderProgram, "light_position"), 1,
-				   glm::value_ptr(_lightPosition));
-	  glUniform3fv(glGetUniformLocation(shaderProgram, "camera_position"), 1,
-				   glm::value_ptr(_camera.mWorld.GetTranslation()));
-
-	  glBindVertexArray(_particelMesh.vao);
-	  glDrawElementsInstanced(GL_TRIANGLES, _particelMesh.indices_nb,
-							  GL_UNSIGNED_INT, nullptr, _particel_count);
-	  glBindVertexArray(0);
-
-	  glEnable(GL_CULL_FACE);
+  glBindVertexArray(_particelMesh.vao);
+  glDrawElementsInstanced(GL_TRIANGLES, _particelMesh.indices_nb,
+                          GL_UNSIGNED_INT, nullptr, _particel_count);
+  glBindVertexArray(0);
 }
 
 void ForestScene::renderFinalResult() {
@@ -1082,15 +1041,14 @@ bool ForestScene::setup(GLFWwindow *window) {
     return _particelVBO;
   };
 
-  auto particel_matrices = generateParticleTransforms(_particel_count);
+  auto particel_matrices = generateTreeTransforms(_particel_count, 80, 80);
   glGenBuffers(1, &_particelVBO);
   glBindBuffer(GL_ARRAY_BUFFER, _particelVBO);
   glBufferData(GL_ARRAY_BUFFER, particel_matrices.size() * sizeof(InstanceData),
                particel_matrices.data(), GL_STATIC_DRAW);
   glBindBuffer(GL_ARRAY_BUFFER, 0); // 解绑
-//  _particelMesh =
-//      parametric_shapes::createQuad(100.0f, 100.0f, 10, 10, particelVBO);
-	_particelMesh = parametric_shapes::createQuad(1.0f, 1.0f, 1, 1, particelVBO);
+  _particelMesh =
+      parametric_shapes::createQuad(100.0f, 100.0f, 10, 10, particelVBO);
   _frogMesh = parametric_shapes::createQuad(100.0f, 100.0f, 1, 1);
 
   std::vector<bonobo::mesh_data> grass_meshes = bonobo::loadObjects(

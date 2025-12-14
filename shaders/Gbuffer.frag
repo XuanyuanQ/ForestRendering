@@ -324,7 +324,7 @@ vec3 adjustSaturation(vec3 color, float saturation) {
   // 在灰度和原色之间插值
   return mix(vec3(grey), color, saturation);
 }
-vec3 adjustLeavesCol(vec3 stayGreen, vec3 turnOrange, vec3 turnRed) {
+float adjustLeavesCol(vec3 stayGreen, vec3 turnOrange, vec3 turnRed) {
 
   float noise = 1.6 * random(float(v_VertexID)) * cos(float(v_InstanceID));
 

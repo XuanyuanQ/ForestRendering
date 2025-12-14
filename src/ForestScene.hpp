@@ -34,7 +34,6 @@ private:
   // 生成矩阵数据的辅助函数
   std::vector<InstanceData> generateTreeTransforms(int count, int Width = 100,
                                                    int Depth = 100);
-  std::vector<InstanceData> generateParticleTransforms(int count);
 
   GLuint createQuadsForPatch();
   void rendtest(GLuint shaderProgram);
