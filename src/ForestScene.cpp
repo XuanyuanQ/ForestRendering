@@ -1404,7 +1404,7 @@ void ForestScene::renderSkybox(glm::mat4 const &view,
   // 3. 传入太阳位置 (必须和渲染树木的一样)
   glUniform3fv(glGetUniformLocation(_skyboxShader, "light_position"), 1,
                glm::value_ptr(_lightPosition));
-
+  glUniform1f(glGetUniformLocation(_skyboxShader, "u_Time"), _elapsedTimeS);
   // 4. 绘制
   glBindVertexArray(_skyboxVAO);
   glDrawArrays(GL_TRIANGLES, 0, 36);
