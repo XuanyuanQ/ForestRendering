@@ -253,79 +253,6 @@ void ForestScene::updateLightMatrix(const glm::vec3 light_pos) {
   light_world_to_clip_matrix = lightProjection * lightView;
 }
 
-void ForestScene::initLightContribution() {
-
-  glGenFramebuffers(1, &lightFBO);
-  glBindFramebuffer(GL_FRAMEBUFFER, lightFBO);
-
-  const unsigned int WIDTH = SHADOW_WIDTH;
-  const unsigned int HEIGHT = SHADOW_HEIGHT;
-
-  // ====================
-  // 1. Light Diffuse
-  // ====================
-  glGenTextures(1, &lDiffuse);
-  glBindTexture(GL_TEXTURE_2D, lDiffuse);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, WIDTH, HEIGHT, 0, GL_RGBA,
-               GL_UNSIGNED_BYTE, nullptr);
-
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                         lDiffuse, 0);
-
-  // ====================
-  // 2. Light Specular
-  // ====================
-  glGenTextures(1, &lSpecular);
-  glBindTexture(GL_TEXTURE_2D, lSpecular);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, WIDTH, HEIGHT, 0, GL_RGBA,
-               GL_UNSIGNED_BYTE, nullptr);
-
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D,
-                         lSpecular, 0);
-
-  // ====================
-  // 3. Ambient
-  // ====================
-  glGenTextures(1, &lAmbient);
-  glBindTexture(GL_TEXTURE_2D, lAmbient);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, WIDTH, HEIGHT, 0, GL_RGBA,
-               GL_UNSIGNED_BYTE, nullptr);
-
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D,
-                         lAmbient, 0);
-
-  glGenTextures(1, &lboDepth);
-  glBindTexture(GL_TEXTURE_2D, lboDepth);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, WIDTH, HEIGHT, 0,
-               GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D,
-                         lboDepth, 0);
-
-  // ====================
-  // Set draw buffers
-  // ====================
-  GLenum attachments[3] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1,
-                           GL_COLOR_ATTACHMENT2};
-  glDrawBuffers(3, attachments);
-
-  // ====================
-  // Check
-  // ====================
-  if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
-    std::cerr << "Light Contribution FBO not complete!" << std::endl;
-
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
-}
 
 void ForestScene::initGbuffer() {
 
@@ -421,55 +348,6 @@ void ForestScene::initShadowMap() {
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void ForestScene::renderFrog(GLuint shaderProgram) {
-  glDisable(GL_CULL_FACE);
-  glBindTexture(GL_TEXTURE_2D, 0);
-  glUseProgram(shaderProgram);
-  glm::mat4 model = glm::mat4(1.0f);
-  // model = glm::rotate(model, glm::radians(-90.f), glm::vec3(1.0f, 0.0f,
-  // 0.0f));
-  glUniformMatrix4fv(
-      glGetUniformLocation(shaderProgram, "vertex_model_to_world"), 1, GL_FALSE,
-      glm::value_ptr(model));
-  glUniformMatrix4fv(
-      glGetUniformLocation(shaderProgram, "vertex_world_to_view"), 1, GL_FALSE,
-      glm::value_ptr(_camera.GetWorldToViewMatrix()));
-  glUniformMatrix4fv(
-      glGetUniformLocation(shaderProgram, "vertex_view_to_projection"), 1,
-      GL_FALSE, glm::value_ptr(_camera.GetViewToClipMatrix()));
-  glUniformMatrix4fv(
-      glGetUniformLocation(shaderProgram, "light_world_to_clip_matrix"), 1,
-      GL_FALSE, glm::value_ptr(light_world_to_clip_matrix));
-  glUniform3fv(glGetUniformLocation(shaderProgram, "light_position"), 1,
-               glm::value_ptr(_lightPosition));
-  glUniform3fv(glGetUniformLocation(shaderProgram, "camera_position"), 1,
-               glm::value_ptr(_camera.mWorld.GetTranslation()));
-  glUniform2f(glGetUniformLocation(shaderProgram, "inverse_screen_resolution"),
-              1.0f / static_cast<float>(gbufffer_w),
-              1.0f / static_cast<float>(gbufffer_h));
-  glUniform3fv(glGetUniformLocation(shaderProgram, "light_direction"), 1,
-               glm::value_ptr(lightgeometry.get_transform().GetFront()));
-  glUniform1i(glGetUniformLocation(shaderProgram, "isApplyShadow"),
-              _applyShadow);
-  glUniform1i(glGetUniformLocation(shaderProgram, "isVolumetricLight"),
-              _isVolumetricLight);
-
-  glActiveTexture(GL_TEXTURE11);
-  glBindTexture(GL_TEXTURE_2D, gDepth);
-  glUniform1i(glGetUniformLocation(shaderProgram, "depth_texture"), 11);
-  glActiveTexture(GL_TEXTURE10);
-  glBindTexture(GL_TEXTURE_2D, shadowMap);
-  glUniform1i(glGetUniformLocation(shaderProgram, "shadow_texture"), 10);
-
-  // glBindVertexArray(_frogMesh.vao);
-
-  // glDrawElements(GL_TRIANGLES, _frogMesh.indices_nb, GL_UNSIGNED_INT,
-  //                reinterpret_cast<GLvoid const *>(0x0));
-  glBindVertexArray(fullScreenVAO);
-  glDrawArrays(GL_TRIANGLES, 0, 3);
-  glBindVertexArray(0u);
-  // glBindVertexArray(0);
-}
 
 void ForestScene::renderPartical(GLuint shaderProgram) {
   glUseProgram(shaderProgram);
@@ -512,51 +390,7 @@ void ForestScene::renderPartical(GLuint shaderProgram) {
   glBindVertexArray(0);
 }
 
-void ForestScene::renderFinalResult() {
-  glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
-  // glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glUseProgram(_resolve_deferred_shader);
 
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, gDiffuse);
-  glUniform1i(glGetUniformLocation(_resolve_deferred_shader, "diffuse_texture"),
-              0);
-
-  glActiveTexture(GL_TEXTURE1);
-  glBindTexture(GL_TEXTURE_2D, gSpecular);
-  glUniform1i(
-      glGetUniformLocation(_resolve_deferred_shader, "specular_texture"), 1);
-
-  glActiveTexture(GL_TEXTURE2);
-  glBindTexture(GL_TEXTURE_2D, lDiffuse);
-  glUniform1i(glGetUniformLocation(_resolve_deferred_shader, "light_d_texture"),
-              2);
-
-  glActiveTexture(GL_TEXTURE3);
-  glBindTexture(GL_TEXTURE_2D, lSpecular);
-  glUniform1i(glGetUniformLocation(_resolve_deferred_shader, "light_s_texture"),
-              3);
-
-  glActiveTexture(GL_TEXTURE4);
-  glBindTexture(GL_TEXTURE_2D, lAmbient);
-  glUniform1i(glGetUniformLocation(_resolve_deferred_shader, "light_a_texture"),
-              4);
-
-  glActiveTexture(GL_TEXTURE5);
-  glBindTexture(GL_TEXTURE_2D, gNormal);
-  glUniform1i(glGetUniformLocation(_resolve_deferred_shader, "normal_texture"),
-              5);
-
-  glBindVertexArray(fullScreenVAO);
-  glDrawArrays(GL_TRIANGLES, 0, 3);
-  glBindVertexArray(0u);
-  // glBindSampler(3, 0u);
-  // glBindSampler(2, 0u);
-  // glBindSampler(1, 0u);
-  // glBindSampler(0, 0u);
-  glUseProgram(0u);
-  glBindTexture(GL_TEXTURE_2D, 0);
-}
 void ForestScene::renderAllobjects(GLuint shaderProgram) {
   glUniform1f(glGetUniformLocation(shaderProgram, "elapsed_time_s"),
               _elapsedTimeS);
@@ -770,115 +604,13 @@ void ForestScene::renderShadowMap(GLuint FBO) {
   // glCullFace(GL_BACK);
 }
 
-void ForestScene::renderLightContribution() {
-
-  glViewport(0, 0, SHADOW_WIDTH, SHADOW_HEIGHT);
-  glBindFramebuffer(GL_FRAMEBUFFER, lightFBO);
-  glDisable(GL_DEPTH_TEST);
-  glDepthMask(GL_FALSE);
-
-  glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-  glClear(GL_COLOR_BUFFER_BIT);
-  glUseProgram(_lightContributionShader);
-
-  auto world =
-      glm::mat4(glm::mat4(1.0f) * lightgeometry.get_transform().GetMatrix());
-  glUniformMatrix4fv(
-      glGetUniformLocation(_lightContributionShader, "vertex_model_to_world"),
-      1, GL_FALSE, glm::value_ptr(world));
-
-  glUniformMatrix4fv(glGetUniformLocation(_lightContributionShader,
-                                          "light_world_to_clip_matrix"),
-                     1, GL_FALSE, glm::value_ptr(light_world_to_clip_matrix));
-  glUniformMatrix4fv(
-      glGetUniformLocation(_lightContributionShader, "vertex_world_to_view"), 1,
-      GL_FALSE, glm::value_ptr(_camera.GetWorldToViewMatrix()));
-  glUniformMatrix4fv(glGetUniformLocation(_lightContributionShader,
-                                          "vertex_view_to_projection"),
-                     1, GL_FALSE,
-                     glm::value_ptr(_camera.GetViewToClipMatrix()));
-
-  glUniform3fv(glGetUniformLocation(_lightContributionShader, "light_position"),
-               1, glm::value_ptr(_lightPosition));
-  glUniform3fv(
-      glGetUniformLocation(_lightContributionShader, "camera_position"), 1,
-      glm::value_ptr(_camera.mWorld.GetTranslation()));
-  glUniform2f(glGetUniformLocation(_lightContributionShader,
-                                   "inverse_screen_resolution"),
-              1.0f / static_cast<float>(SHADOW_WIDTH),
-              1.0f / static_cast<float>(SHADOW_HEIGHT));
-  glUniform3fv(
-      glGetUniformLocation(_lightContributionShader, "light_direction"), 1,
-      glm::value_ptr(lightgeometry.get_transform().GetFront()));
-
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, shadowMap);
-  glUniform1i(glGetUniformLocation(_lightContributionShader, "shadow_texture"),
-              0);
-
-  glActiveTexture(GL_TEXTURE1);
-  glBindTexture(GL_TEXTURE_2D, gNormal);
-  glUniform1i(glGetUniformLocation(_lightContributionShader, "normal_texture"),
-              1);
-
-  glActiveTexture(GL_TEXTURE2);
-  glBindTexture(GL_TEXTURE_2D, gDepth);
-  glUniform1i(glGetUniformLocation(_lightContributionShader, "depth_texture"),
-              2);
-
-  glActiveTexture(GL_TEXTURE3);
-  glBindTexture(GL_TEXTURE_2D, gObjectType);
-  glUniform1i(glGetUniformLocation(_lightContributionShader, "object_type"), 3);
-
-  glBindVertexArray(lightMesh.vao);
-  glDrawArrays(GL_TRIANGLES, 0, 6);
-
-  glDepthMask(GL_TRUE);
-  glEnable(GL_DEPTH_TEST);
-
-  glBindFramebuffer(GL_FRAMEBUFFER, 0);
-  glBindVertexArray(0u);
-  glUseProgram(0);
-  glBindTexture(GL_TEXTURE_2D, 0);
-}
 
 bool ForestScene::setup(GLFWwindow *window) {
 
   // ----------------------------------------------------------------
   // 1. 加载 Shader
   // ----------------------------------------------------------------
-  _programManager.CreateAndRegisterProgram(
-      "Fallback",
-      {{ShaderType::vertex, "default.vert"},
-       {ShaderType::fragment, "default.frag"}},
-      _fallbackShader);
 
-  _programManager.CreateAndRegisterProgram(
-      "Wave",
-      {{ShaderType::vertex, "wave.vert"}, {ShaderType::fragment, "wave.frag"}},
-      _waveShader);
-  if (_waveShader == 0u) {
-    LogError("Failed to load _waveShader shader");
-    return -1;
-  }
-  _programManager.CreateAndRegisterProgram(
-      "suntest",
-      {{ShaderType::vertex, "suntest.vert"},
-       {ShaderType::fragment, "suntest.frag"}},
-      _sunTestShader);
-  if (_sunTestShader == 0u) {
-    LogError("Failed to load _sunTestShader shader");
-    return -1;
-  }
-  _programManager.CreateAndRegisterProgram(
-      "forestTest",
-      {{ShaderType::vertex, "forestTest.vert"},
-       {ShaderType::fragment, "forestTest.frag"}},
-      _forestTestShader);
-  if (_forestTestShader == 0u) {
-    LogError("Failed to load forestTest shader");
-    return -1;
-  }
   _programManager.CreateAndRegisterProgram(
       "shadowMapShader",
       {{ShaderType::vertex, "shadowDepth.vert"},
@@ -897,33 +629,7 @@ bool ForestScene::setup(GLFWwindow *window) {
     LogError("Failed to load _gBufferShader shader");
     return -1;
   }
-  _programManager.CreateAndRegisterProgram(
-      "lightContributionShader",
-      {{ShaderType::vertex, "ligihtContribution.vert"},
-       {ShaderType::fragment, "ligihtContribution.frag"}},
-      _lightContributionShader);
-  if (_lightContributionShader == 0u) {
-    LogError("Failed to load _lightContributionShader shader");
-    return -1;
-  }
-  _programManager.CreateAndRegisterProgram(
-      "Resolve deferred",
-      {{ShaderType::vertex, "resolve_deferred.vert"},
-       {ShaderType::fragment, "resolve_deferred.frag"}},
-      _resolve_deferred_shader);
-  if (_resolve_deferred_shader == 0u) {
-    LogError("Failed to load deferred resolution shader");
-    return -1;
-  }
-  _programManager.CreateAndRegisterProgram(
-      "grassShader",
-      {{ShaderType::vertex, "grass.vert"},
-       {ShaderType::fragment, "grass.frag"}},
-      _grassShader);
-  if (_grassShader == 0u) {
-    LogError("Failed to load _grassShader shader");
-    return -1;
-  }
+
   _programManager.CreateAndRegisterProgram(
       "_particelShader",
       {{ShaderType::vertex, "particle.vert"},
@@ -933,32 +639,8 @@ bool ForestScene::setup(GLFWwindow *window) {
     LogError("Failed to load _particelShader shader");
     return -1;
   }
-  _programManager.CreateAndRegisterProgram(
-      "_volumetricLightShader",
-      {{ShaderType::vertex, "volumetricLight.vert"},
-       {ShaderType::fragment, "volumetricLight.frag"}},
-      _volumetricLightShader);
-  if (_volumetricLightShader == 0u) {
-    LogError("Failed to load volumetricLight shader");
-    return -1;
-  }
-  GLuint tessHeightMapShader;
-  _programManager.CreateAndRegisterProgram(
-      "tessHeightMap",
-      {{ShaderType::vertex, "terrain.vert"},
-       {ShaderType::tess_ctrl, "terrain.tcs"},
-       {ShaderType::tess_eval, "terrain.tes"},
-       {ShaderType::fragment, "terrain.frag"}},
-      _tessHeightMapShader);
 
-  if (_tessHeightMapShader == 0) {
-    LogError("11Failed to load shaders.");
-    return false;
-  }
-  if (_fallbackShader == 0 || _tessHeightMapShader == 0 || _grassShader == 0) {
-    LogError("Failed to load shaders.");
-    return false;
-  }
+
 
   // ----------------------------------------------------------------
   // 2. 准备 Instancing VBO Setup 函数
@@ -1086,33 +768,10 @@ bool ForestScene::setup(GLFWwindow *window) {
   // 5. 构建 Node 结构
   // ----------------------------------------------------------------
   auto p = _camera.mWorld.GetTranslation();
-  // 定义 Uniform 设置回调
-  auto set_uniforms = [this, &p](GLuint program) {
-    glUniform1i(glGetUniformLocation(program, "is_leaves"),
-                _isLeavesMesh ? 1 : 0);
-    glUniform3fv(glGetUniformLocation(program, "light_position"), 1,
-                 glm::value_ptr(_lightPosition));
-    glUniform3fv(glGetUniformLocation(program, "camera_position"), 1,
-                 glm::value_ptr(_camera.mWorld.GetTranslation()));
-    glUniform1f(glGetUniformLocation(program, "elapsed_time_s"), _elapsedTimeS);
-    float actualStrength = _isWindEnabled ? _windStrength : 0.0f;
-    glUniform1f(glGetUniformLocation(program, "wind_strength"), actualStrength);
-  };
-
   // 遍历所有 Mesh，创建 Node
   for (auto &obj : tree_meshes) {
     Node node;
     node.set_geometry(obj);
-
-    // 设置 Shader 和 Uniform 回调
-    node.set_program(&_fallbackShader, set_uniforms);
-
-    // 添加纹理 (Node 会自动绑定到 Texture Unit 0, 1, 2...)
-    node.add_texture("maple_bark", maple_bark, GL_TEXTURE_2D);
-    node.add_texture("maple_leaf", maple_leaf, GL_TEXTURE_2D);
-    node.add_texture("leaves_alpha", leaves_alpha, GL_TEXTURE_2D);
-    node.add_texture("maple_leaf_normal", maple_leaf_normal, GL_TEXTURE_2D);
-    node.add_texture("maple_bark_normal", maple_bark_normal, GL_TEXTURE_2D);
     _trees.insert({obj.name, node});
     _tree_meshes.insert({obj.name, obj});
   }
@@ -1121,13 +780,7 @@ bool ForestScene::setup(GLFWwindow *window) {
     Node node;
     node.set_geometry(obj);
     std::cout << "grass_meshes" << std::endl;
-    // 设置 Shader 和 Uniform 回调
-    node.set_program(&_grassShader, set_uniforms);
-
-    // 添加纹理 (Node 会自动绑定到 Texture Unit 0, 1, 2...)
-    node.add_texture("grass_texture", grass_leaf, GL_TEXTURE_2D);
-    node.add_texture("grass_alpha", grass_alpha, GL_TEXTURE_2D);
-
+  
     _grass.insert({obj.name, node});
     _grass_meshes.insert({obj.name, obj});
   }
@@ -1135,32 +788,8 @@ bool ForestScene::setup(GLFWwindow *window) {
   // 6. 配置 Wave 地面 Node
   // ----------------------------------------------------------------
   _waveMesh = parametric_shapes::createQuad(100.0f, 100.0f, 1000, 1000);
-
-  auto wave_uniforms = [this](GLuint program) {
-    glUniform1i(glGetUniformLocation(program, "use_normal_mapping"), 0);
-    glUniform3fv(glGetUniformLocation(program, "light_position"), 1,
-                 glm::value_ptr(_lightPosition));
-    glUniform3fv(glGetUniformLocation(program, "camera_position"), 1,
-                 glm::value_ptr(_camera.mWorld.GetTranslation()));
-    glUniform1f(glGetUniformLocation(program, "elapsed_time_s"), _elapsedTimeS);
-    // 材质参数
-    glUniform3f(glGetUniformLocation(program, "ambient"), 0.1f, 0.1f, 0.1f);
-    glUniform3f(glGetUniformLocation(program, "diffuse"), 0.7f, 0.2f, 0.4f);
-    glUniform3f(glGetUniformLocation(program, "specular"), 1.0f, 1.0f, 1.0f);
-    glUniform1f(glGetUniformLocation(program, "shininess"), 10.0f);
-  };
-
-  auto light_uniforms = [this](GLuint program) {
-    glUniformMatrix4fv(glGetUniformLocation(program, "vertex_world_to_view"), 1,
-                       GL_FALSE,
-                       glm::value_ptr(_camera.GetWorldToViewMatrix()));
-    glUniformMatrix4fv(
-        glGetUniformLocation(program, "vertex_view_to_projection"), 1, GL_FALSE,
-        glm::value_ptr(_camera.GetViewToClipMatrix()));
-  };
-
   _quadNode.set_geometry(_waveMesh);
-  _quadNode.set_program(&_waveShader, wave_uniforms);
+
 
   GLuint floor_tex = bonobo::loadTexture2D(
       config::resources_path("forested-floor/textures/KiplingerFLOOR.png"));
@@ -1193,7 +822,7 @@ bool ForestScene::setup(GLFWwindow *window) {
   initShadowMap();
   initGbuffer();
   // initLightContribution();
-  lightgeometry.set_program(&_lightContributionShader, light_uniforms);
+//  lightgeometry.set_program(&_lightContributionShader, light_uniforms);
 
   // ----------------------------------------------------------------
   // 7. GL 状态
@@ -1248,40 +877,7 @@ void ForestScene::render(GLFWwindow *window) {
   glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 
   bonobo::changePolygonMode(_polygonMode);
-  // 1. 渲染地面
-  // Node::render 通常接受 (VP矩阵, Model矩阵)
 
-  {
-
-    _terrain_world =
-        glm::mat4(glm::mat4(1.0f) * _quadNode.get_transform().GetMatrix());
-    // _quadNode.render(_camera.GetWorldToClipMatrix(), glm::mat4(1.0f));
-  }
-
-  // 2. 渲染树木
-  for (auto &t : _trees) {
-    // 根据名字判断是否为树叶，并设置状态变量
-    // 这个变量会被上面定义的 set_uniforms lambda 捕获并传给 shader
-    if (t.first.find("leaves") != std::string::npos) {
-      _isLeavesMesh = true;
-
-      glDisable(GL_CULL_FACE); // 树叶双面渲染
-    } else {
-      _isLeavesMesh = false;
-      glEnable(GL_CULL_FACE);
-    }
-
-    // 调用 Node 的渲染
-    // t.second.render(_camera.GetWorldToClipMatrix(), glm::mat4(1.0f),
-    //                 _treeCount);
-  }
-  for (auto &g : _grass) {
-    // glDisable(GL_CULL_FACE);
-    // g.second.render(_camera.GetWorldToClipMatrix(), glm::mat4(1.0f),
-    //                 _grassCount);
-  }
-  // lightgeometry.render(_camera.GetWorldToClipMatrix(), glm::mat4(1.0f));
-  // glViewport(0, 0, w, h);
   renderShadowMap(shadowFBO);
   renderShadowMap(gbufferFBO);
   glViewport(0, 0, w, h);
