@@ -562,7 +562,7 @@ void ForestScene::renderAllobjects(GLuint shaderProgram) {
               _elapsedTimeS);
   float currentWind = _isWindEnabled ? _windStrength : 0.0f;
   glUniform1f(glGetUniformLocation(shaderProgram, "wind_strength"),
-              currentWind * 0.01);
+              currentWind * 0.1);
 
   int label = 0;
 
