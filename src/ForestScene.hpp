@@ -31,7 +31,6 @@ public:
   FPSCameraf &getCamera() { return _camera; }
 
 private:
-  // 生成矩阵数据的辅助函数
   std::vector<InstanceData> generateTreeTransforms(int count, int Width = 100,
                                                    int Depth = 100);
 
@@ -51,9 +50,9 @@ private:
   void renderPartical(GLuint shaderProgram);
   void renderFrog(GLuint shaderProgram);
 
-  void initSkybox(); // 初始化函数
+  void initSkybox();
   void renderSkybox(glm::mat4 const &view,
-                    glm::mat4 const &projection); // 渲染函数
+                    glm::mat4 const &projection);
 
 private:
   WindowManager &_windowManager;
@@ -61,13 +60,13 @@ private:
   FPSCameraf _camera;
   ShaderProgramManager _programManager;
 
-  // --- 资源 ID ---
-  GLuint _fallbackShader; // 树木用的 Shader
+  // --- resource ID ---
+  GLuint _fallbackShader;
   GLuint _grassShader;
   GLuint _particelShader;
   GLuint _volumetricLightShader;
 
-  GLuint _waveShader; // 地面用的 Wave Shader
+  GLuint _waveShader;
 
   GLuint _tessHeightMapShader;
   GLuint _shadowMapShader;
@@ -78,7 +77,7 @@ private:
   GLuint _sunTestShader;
   GLuint _forestTestShader;
 
-  // --- 纹理 ---
+  // --- Texture ---
   GLuint _texBark;
   GLuint _texLeaf;
   GLuint _normalBark;
@@ -88,31 +87,31 @@ private:
   GLuint _texGrassMask;
   GLuint _texGrass;
 
-  // --- 核心数据 ---
-  GLuint _instanceVBO; // 实例化矩阵缓冲
+
+  GLuint _instanceVBO;
   GLuint _particelVBO;
-  int _treeCount; // 树的数量
+  int _treeCount;
   int _grassCount;
 
-  // 使用 Node 存储树木的各个部分
+
   std::unordered_map<std::string, Node> _trees;
   std::unordered_map<std::string, Node> _grass;
   std::unordered_map<std::string, bonobo::mesh_data> _tree_meshes;
   std::unordered_map<std::string, bonobo::mesh_data> _grass_meshes;
 
-  // 地面 Node 和 Mesh
+  
   Node _quadNode;
   bonobo::mesh_data _waveMesh; //
   bonobo::mesh_data _particelMesh;
   bonobo::mesh_data _frogMesh;
   // Node _particelNode;
 
-  // --- 状态变量 ---
+  
   float _elapsedTimeS;
   bool _isLeavesMesh;
   glm::vec3 _lightPosition;
 
-  // UI 控制
+  // UI
   bonobo::cull_mode_t _cullMode;
   bonobo::polygon_mode_t _polygonMode;
   bool _showGui;
@@ -126,9 +125,9 @@ private:
   GLuint _skyboxVBO;
   GLuint _skyboxShader;
 
-  bool _isPaused;  // 暂停开关
-  float _sunTime;  // 太阳的专属时间
-  float _daySpeed; // 太阳移动速度
+  bool _isPaused;
+  float _sunTime;
+  float _daySpeed; 
   bool _applyShadow;
   bool _isVolumetricLight;
   float lightX{-52.8f};

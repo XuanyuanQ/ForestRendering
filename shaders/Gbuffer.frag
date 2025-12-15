@@ -9,14 +9,14 @@ uniform int isApplyShadow;
 uniform int isVolumetricLight;
 uniform mat4 light_world_to_clip_matrix;
 
-// 摄像机位置
+
 uniform vec3 camera_position;
 
-// 光源参数
+
 uniform vec3 light_position;
 uniform vec3 light_direction;
 
-// 屏幕反向分辨率
+// Screen reverse resolution
 uniform vec2 inverse_screen_resolution;
 
 in VS_OUT {
@@ -24,7 +24,7 @@ in VS_OUT {
   vec2 texcoord;
   vec3 tangent;
   vec3 binormal;
-  mat3 TBN; // 输出 TBN
+  mat3 TBN;
   vec4 ndc;
   vec3 world_pos;
   mat4 normal_model_to_world;
@@ -52,17 +52,17 @@ vec3 getSunColor(float sunHeight) {
 
   vec3 sunColor;
   if (sunHeight > 0.2) {
-    // 白天 -> 中午 (混合 日落色 和 中午色)
+    // Daytime -> Midday (a blend of sunset and midday colors)
     float t = (sunHeight - 0.2) / 0.8;
     sunColor = mix(sunsetSun, noonSun, t);
 
   } else if (sunHeight > -0.1) {
-    // 日落 -> 晚上 (混合 晚上色 和 日落色)
+    // Sunset -> Evening (a blend of evening and sunset colors)
     float t = (sunHeight + 0.1) / 0.3;
     sunColor = mix(nightSun, sunsetSun, t);
 
   } else {
-    // 纯晚上
+    // Night
     sunColor = nightSun;
   }
   float factor = pow(150, sunHeight * 0.6 + 1.0);
@@ -72,7 +72,7 @@ vec3 getSunColor(float sunHeight) {
 void calculateGrass(in vec4 albedoTexture, in vec3 L, in vec3 V, in vec3 N,
                     out vec3 ambient, out vec3 diffuse, out vec3 specular) {
   // -----------------------------------------------------------
-  // 3. 动态天空颜色
+  // 3. Dynamic sky color
   // -----------------------------------------------------------
   float sunHeight = L.y;
   vec3 R = reflect(-L, N);
@@ -102,26 +102,23 @@ void calculateGrass(in vec4 albedoTexture, in vec3 L, in vec3 V, in vec3 N,
   }
 
   // -----------------------------------------------------------
-  // 4. 光照计算
+  // 4. Lighting calculation
   // -----------------------------------------------------------
 
-  // 环境光
+  // Ambient light
   ambient = skyAmbient * albedoTexture.rgb * 0.5;
 
-  // 漫反射
-  // 双面光照技巧：草是薄片，背面也应该受光
-  // 简单的双面光照：用 abs(dot(L, N)) 或者把法线翻转
-  // 这里先用标准的 max(dot)
+  // Diffuse reflection
   float diff = max(dot(L, N), 0.0);
   diffuse = diff * sunColor * albedoTexture.rgb;
 
-  // 高光
+  // Highlights
   float spec = pow(max(dot(V, R), 0.0), 10.0);
-  specular = spec * sunColor * 0.1; // 强度很低
+  specular = spec * sunColor * 0.1;
 
   if (sunHeight > -0.1) {
     diffuse = diffuse * 0.3;
-    specular = vec3(0.0, 0.38, 0.0) * 0.1; // 暂时规避加上specular无阴影
+    specular = vec3(0.0, 0.38, 0.0) * 0.1;
   }
 }
 
@@ -134,88 +131,88 @@ vec3 calculateTrans(in vec4 albedoTexture, in vec3 L, in vec3 V, in vec3 N) {
 
   float translucencyDot = max(0.0, dot(V, distortedLightVector));
 
-  // 3. 应用聚焦度和强度
+	// 3. Apply focus and intensity
   float translucencyIntensity = pow(translucencyDot, power) * scale;
   return translucencyIntensity * sunCol;
 }
 // --------------------------------------
-// 地形光照计算
+// Terrain lighting calculation
 // --------------------------------------
 void calculateTrees(in float shininess, in float specularStrength,
                     in vec4 albedoTexture, in vec3 L, in vec3 V, in vec3 N,
                     out vec3 ambient, out vec3 diffuse, out vec3 specular) {
 
-  // 1. 获取太阳高度 (0.0是地平线，1.0是头顶)
-  // 我们用 L.y (光照向量的垂直分量) 来判断
+	// 1. Obtain the sun's altitude (0.0 is the horizon, 1.0 is the zenith)
+	// We use L.y (the vertical component of the illumination vector) to determine this.
   float sunHeight = L.y;
   vec3 R = reflect(-L, N);
 
-  // 2. 定义不同时刻的阳光颜色 (Light Color)
-  vec3 noonSun = vec3(1.0, 0.98, 0.9);  // 中午：暖白
-  vec3 sunsetSun = vec3(1.0, 0.4, 0.1); // 日落：橘红
-  vec3 nightSun = vec3(0.0, 0.0, 0.0);  // 晚上：无光
+  // 2. Define the color of sunlight at different times (Light Color)
+  vec3 noonSun = vec3(1.0, 0.98, 0.9);  // Noon: Warm White
+  vec3 sunsetSun = vec3(1.0, 0.4, 0.1); // Sunset: Orange-red
+  vec3 nightSun = vec3(0.0, 0.0, 0.0);  // Night: No light
 
-  // 3. 定义不同时刻的环境光颜色 (Ambient Color)
-  vec3 noonAmb = vec3(0.4, 0.4, 0.45);    // 中午环境：亮蓝灰
-  vec3 sunsetAmb = vec3(0.3, 0.2, 0.2);   // 日落环境：暗红褐
-  vec3 nightAmb = vec3(0.02, 0.02, 0.05); // 晚上环境：深蓝黑
+  // 3. Define the ambient color at different times.
+  vec3 noonAmb = vec3(0.4, 0.4, 0.45);    // Midday environment: bright blue-gray
+  vec3 sunsetAmb = vec3(0.3, 0.2, 0.2);   // Sunset environment: dark reddish-brown
+  vec3 nightAmb = vec3(0.02, 0.02, 0.05); // Evening environment: dark blue-black
 
-  // 4. 根据高度混合颜色
+  // 4.Based on highly mixed colors
   vec3 sunColor;
   vec3 skyAmbient;
 
   if (sunHeight > 0.2) {
-    // 白天 -> 中午 (混合 日落色 和 中午色)
+    // Daytime -> Midday (a blend of sunset and midday colors)
     float t = (sunHeight - 0.2) / 0.8;
     sunColor = mix(sunsetSun, noonSun, t);
     skyAmbient = mix(sunsetAmb, noonAmb, t);
   } else if (sunHeight > -0.1) {
-    // 日落 -> 晚上 (混合 晚上色 和 日落色)
+    // Sunset -> Evening (a blend of evening and sunset colors)
     float t = (sunHeight + 0.1) / 0.3;
     sunColor = mix(nightSun, sunsetSun, t);
     skyAmbient = mix(nightAmb, sunsetAmb, t);
   } else {
-    // 纯晚上
+    // Night
     sunColor = nightSun;
     skyAmbient = nightAmb;
   }
 
   // -------------------------------------------------------------
-  // 5. 应用光照 (使用动态计算出的 sunColor 和 skyAmbient)
+  // 5. Apply lighting (using dynamically calculated sunColor and skyAmbient).
   // -------------------------------------------------------------
 
-  // 环境光 = 动态环境色 * 材质固有色
+  // Ambient light = Dynamic ambient color * Material's inherent color
   ambient = skyAmbient * albedoTexture.rgb;
 
-  // 漫反射 = 漫反射强度 * 动态阳光色 * 材质固有色
+  // Diffuse reflection = Diffuse reflection intensity * Dynamic sunlight color * Material inherent color
   float diff = max(dot(L, N), 0.0);
   //   diff = 1.0;
   //   diffuse = diff * sunColor * albedoTexture.rgb;
   diffuse = diff * sunColor * albedoTexture.rgb;
 
-  // 高光 = 高光强度 * 动态阳光色
+  // Highlight = Highlight Intensity * Dynamic Sunlight Color
   float spec = pow(max(dot(V, R), 0.0), shininess);
   specular = spec * specularStrength * sunColor;
 }
 
 // --------------------------------------
-// 树木光照计算
+// Tree light calculation
 // --------------------------------------
 void calculateTerrain(in vec4 albedoTexture, in vec3 L, in vec3 V, in vec3 N,
                       out vec3 ambient, out vec3 diffuse, out vec3 specular) {
   // -----------------------------------------------------------
-  // 3. 动态天空颜色
+  // 3. Dynamic sky color
   // -----------------------------------------------------------
-  // 通过光照向量的 Y 分量判断太阳高度
+  // Determine the solar altitude using the Y component of the illumination vector
   float sunHeight = L.y;
   vec3 R = reflect(-L, N);
 
-  // 定义天空颜色 (正午、日落、夜晚)
+  // Define the sky color (noon, sunset, night).
   vec3 noonSun = vec3(1.0, 0.98, 0.9);
   vec3 sunsetSun = vec3(1.0, 0.4, 0.1);
   vec3 nightSun = vec3(0.0, 0.0, 0.0);
 
-  // 定义环境光颜色
+  // Define ambient light color
   vec3 noonAmb = vec3(0.4, 0.4, 0.45);
   vec3 sunsetAmb = vec3(0.3, 0.2, 0.2);
   vec3 nightAmb = vec3(0.02, 0.02, 0.05);
@@ -223,7 +220,7 @@ void calculateTerrain(in vec4 albedoTexture, in vec3 L, in vec3 V, in vec3 N,
   vec3 sunColor;
   vec3 skyAmbient;
 
-  // 混合逻辑
+  // Mixed logic
   if (sunHeight > 0.2) {
     float t = (sunHeight - 0.2) / 0.8;
     sunColor = mix(sunsetSun, noonSun, t);
@@ -238,26 +235,21 @@ void calculateTerrain(in vec4 albedoTexture, in vec3 L, in vec3 V, in vec3 N,
   }
 
   // -----------------------------------------------------------
-  // 4. 光照计算
+  // 4. Lighting calculation
   // -----------------------------------------------------------
 
-  // A. 环境光
-  // 混合：天空环境色 * 地面纹理颜色
   ambient = skyAmbient * albedoTexture.rgb;
 
-  // B. 漫反射
-  // 混合：漫反射强度 * 阳光颜色 * 地面纹理颜色
   float diff = max(dot(L, N), 0.0);
   diffuse = diff * sunColor * albedoTexture.rgb * 0.3;
 
-  // C. 高光
-  float spec = pow(max(dot(V, R), 0.0), 50.0); // shininess 设为 5.0
-  specular = spec * sunColor * 0.1;            // 强度设为 0.1
+  float spec = pow(max(dot(V, R), 0.0), 50.0);
+  specular = spec * sunColor * 0.1;
 
   if (sunHeight > -0.1) {
     ambient = ambient * 0.4;
     diffuse = diffuse * 0.3;
-    specular = vec3(0.5, 0.38, 0.2) * 0.1; // 暂时规避加上specular无阴影
+    specular = vec3(0.5, 0.38, 0.2) * 0.1;
   }
 }
 
@@ -265,53 +257,51 @@ float calculateLight(vec3 world_pos, mat4 light_projection,
                      vec2 shadowmap_texel_size) {
   vec4 clip_pos = light_projection * vec4(world_pos, 1.0);
 
-  // 1. 计算 NDC 坐标
+  // 1. Calculate NDC coordinates
   vec3 projCoords = clip_pos.xyz / clip_pos.w;
 
-  // 2. 变换到 [0, 1] 区间 (用于纹理采样和深度比较)
-  // 这一步把 [-1, 1] 的 NDC 深度变成了 [0, 1] 的深度
+  // 2. Transform to the [0, 1] interval (for texture sampling and depth comparison)
   projCoords = projCoords * 0.5 + 0.5;
 
-  // 3. 解决超出视锥体的边界问题
+  // 3. Solving the problem of extending beyond the view frustum boundary
   if (projCoords.z > 1.0)
     return 1.0;
 
   float current_depth = projCoords.z;
 
-  // 4. 计算 Bias (根据你的场景调整，0.005 对于正交投影通常是安全的)
+  // 4. Calculate Bias
   float bias = 0.005 / clip_pos.w;
 
   float shadow_sum = 0.0;
 
-  // PCF 5x5 采样
+  // PCF 5x5
   for (int i = -2; i <= 2; ++i) {
     for (int j = -2; j <= 2; ++j) {
-      // 采样 ShadowMap (值在 0.0 到 1.0 之间)
+      // Sample the ShadowMap (values ​​between 0.0 and 1.0).
       float closest_depth =
           texture(shadow_texture,
                   projCoords.xy + vec2(i, j) * shadowmap_texel_size)
               .r;
 
-      // 比较逻辑：
-      // 如果 "当前深度 - bias" > "最近深度"，说明我在后面 -> 阴影 (1.0)
-      // 否则 -> 亮部 (0.0)
+		// Comparison logic:
+		// If "current depth - bias" > "recent depth", then I am behind -> Shadow (1.0)
+		// Otherwise -> Highlight (0.0)
       if (current_depth - bias > closest_depth)
         shadow_sum += 1.0;
     }
   }
 
-  //   计算平均阴影值
-  //   shadow_sum 是有多少个点说我是阴影 如果 25 个点都说阴影，shadow_factor =
-  //   1.0
+	// Calculate the average shadow value
+	// shadow_sum represents the number of points that identify as shadow.
+	// If all 25 points identify as shadow, then shadow_factor = 1.0
   float shadow_factor = shadow_sum / 25.0;
   return 1.0 - shadow_factor;
   //   shadow_sum = texture(shadow_texture, projCoords.xy).r;
-  // 返回光照强度 (1.0 - 阴影)
   //   return shadow_sum;
 }
 
 // ==================================================================================
-// 体积光计算核心函数
+// Volumetric light computation core function
 // ==================================================================================
 
 float Random(vec2 co) {
@@ -319,67 +309,68 @@ float Random(vec2 co) {
 }
 float random(float seed) { return fract(sin(seed) * 43758.5453123); }
 vec3 adjustSaturation(vec3 color, float saturation) {
-  // 计算灰度值 (亮度)
+  // Calculate grayscale values ​​(brightness).
   float grey = dot(color, vec3(0.299, 0.587, 0.114));
-  // 在灰度和原色之间插值
+  // Interpolation between grayscale and primary colors
   return mix(vec3(grey), color, saturation);
 }
 vec3 adjustLeavesCol(vec3 stayGreen, vec3 turnOrange, vec3 turnRed) {
 
   float noise = 1.6 * random(float(v_VertexID)) * cos(float(v_InstanceID));
 
-  // pow(noise, 2.5) 意味着大部分结果会比较小（偏绿），
-  // 只有当 noise 接近 1.0 时，结果才会迅速变大（变红）。
-  // 这符合“初秋”的感觉：大部分还是绿/黄，少部分红。
+	// pow(noise, 2.5) means that most results will be relatively small (leaning towards green),
+	// Only when the noise approaches 1.0 will the results rapidly increase (turn red).
+	// This matches the feeling of "early autumn": mostly green/yellow, with a small portion of red.
   float t = pow(noise, 3.5);
 
   vec3 finalTint;
 
-  // 我们使用两个 mix 来实现三阶段过渡
+ // We use two mixes to implement the three-stage transition
   if (t < 0.5) {
-    // 前 50% 的概率：在“墨绿”和“金橙”之间过渡
-    // 将 t 从 [0.0, 0.5] 映射到 [0.0, 1.0]
+	  // First 50% probability: Transition between "dark green" and "golden orange"
+	  // Map t from [0.0, 0.5] to [0.0, 1.0]
     float subT = t * 2.0;
     finalTint = mix(stayGreen, turnOrange, subT);
   } else {
-    // 后 50% 的概率：在“金橙”和“火红”之间过渡
-    // 将 t 从 [0.5, 1.0] 映射到 [0.0, 1.0]
+	  // The last 50% probability: transitioning between "Golden Orange" and "Fiery Red"
+	  // Map t from [0.5, 1.0] to [0.0, 1.0]
     float subT = (t - 0.5) * 2.0;
     finalTint = mix(turnOrange, turnRed, subT);
   }
 
-  // --- 【明度微调】 ---
-  // 红叶子通常比绿叶子看起来颜色更深重一点
-  // 如果 t 比较大（偏红），稍微降低一点亮度
+  // --- 【Brightness Adjustment】 ---
+	// Red leaves usually appear slightly darker than green leaves
+ // If t is relatively high (leaning towards red), slightly reduce the brightness.
   float brightness = 1.0 - t * 0.2; // 0.8 ~ 1.0
   return finalTint * brightness;
 }
 
-// 米氏散射相位函数
+// Mie scattering phase function
 float GetMiePhase(float g, float cosTheta) {
-  // 针对极高 G 值的数值稳定性优化
+	// Numerical stability optimization for extremely high G values
   float g2 = g * g;
   float num = 1.0 - g2;
   float denom = 1.0 + g2 - 2.0 * g * cosTheta;
-  // 防止分母为 0
+  //To prevent the denominator from being 0
   denom = max(denom, 0.0001);
   return num / (4.0 * 3.14159265 * pow(denom, 1.5));
 }
 
 float GetAdaptiveIntensity(vec3 currentPos, vec3 sunDir, vec3 rayDir) {
 
-  // 1. 【高度衰减】基于位置 (Position Based)
-  // 逻辑：树根处(0m)光很强，树冠处(15m+)光变弱。
-  // 这样光束在穿过树冠时会变得柔和，不会掩盖叶子细节。
+	// 1. **[Height Attenuation]** Based on Position
+	// Logic: Light is very strong at the tree roots (0m), and weaker at the tree crown (15m+).
+	// This softens the light beam as it passes through the crown, preventing it from obscuring leaf details.
   float height = max(0.0, currentPos.y);
-  // 0米处强度 1.0，20米处强度降为 0.2
+	// Strength at 0 meters is 1.0, and strength at 20 meters decreases to 0.2.
   float heightAtten = 1.0 - smoothstep(0.0, 25.0, height) * 0.8;
 
-  // 2. 【角度衰减】基于视角 (Angle Based)
-  // 逻辑：当你越是正对太阳看，我就越把强度压低一点，防止过曝。
-  float lookAtSun = dot(rayDir, sunDir); // 1.0 表示直视太阳
-  // 如果直视太阳(>0.9)，强度乘数会变小(比如乘以0.5)
-  // 侧面看时，强度保持 1.0
+	// 2. [Angle Attenuation] Based on Viewpoint
+	// Logic: The closer you are to the sun, the lower the intensity will be to prevent overexposure.
+  float lookAtSun = dot(rayDir, sunDir); // 1.0 indicates looking directly at the sun
+	
+	// If you are looking directly at the sun (>0.9), the intensity multiplier will decrease (e.g., multiply by 0.5).
+	// When viewed from the side, the intensity remains at 1.0.
   float angleAtten = 1.0 - smoothstep(0.8, 1.0, lookAtSun) * 0.8;
 
   return heightAtten * angleAtten;
@@ -389,7 +380,7 @@ vec3 CalculateVolumetricFog(vec3 worldPos, vec3 cameraPos, vec3 sunDir,
                             vec3 sunHighIntensityColor, mat4 lightMatrix,
                             sampler2D shadowMap, vec2 screenPos) {
 
-  int STEPS = 32; // 步数，越多越好
+  int STEPS = 32;
   float MAX_DISTANCE = 250.0;
 
   vec3 rayVector = worldPos - cameraPos;
@@ -399,7 +390,7 @@ vec3 CalculateVolumetricFog(vec3 worldPos, vec3 cameraPos, vec3 sunDir,
   targetDistance = rayLength;
   float stepLength = targetDistance / float(STEPS);
 
-  // Dithering 抖动
+  // Dithering
   float jitter = Random(screenPos + vec2(sin(sunDir.x), cos(sunDir.z)));
   vec3 currentPos = cameraPos + rayDir * stepLength * jitter;
 
@@ -419,9 +410,9 @@ vec3 CalculateVolumetricFog(vec3 worldPos, vec3 cameraPos, vec3 sunDir,
     // if (projCoords.z < 1.0 && projCoords.x > 0.0 && projCoords.x < 1.0 &&
     //     projCoords.y > 0.0 && projCoords.y < 1.0) {
     float closestDepth = texture(shadowMap, projCoords.xy).r * 2.0 - 1.0;
-    // 假设 ShadowMap 背景是 1.0，物体深度 < 1.0
+	  // Assume the ShadowMap background is 1.0 and the object depth is < 1.0.
     if (projCoords.z > closestDepth + 0.0005) {
-      shadow = 0.0; // 在阴影里
+      shadow = 0.0; // In the shadows
     }
     // }
 
@@ -471,20 +462,11 @@ void main() {
     finalNormal = normalize(fs_in.TBN * rawNormal);
     shininess = 30.0;
     specularStrength = 0.3;
-    // --- 【初秋色彩定义】 ---
-
-    // 阶段A: 保持原本的绿色 (Tint = 1.0 表示不改变)
-    // 稍微加一点点蓝绿色调，让没变色的叶子看起来更深沉
+   
     vec3 stayGreen = vec3(0.6, 0.8, 0.8);
-
-    // 阶段B: 变黄/橙色 (增加红和绿，减少蓝)
-    // 这是一个明亮的金橙色
     vec3 turnOrange = vec3(0.8, 0.6, 0.3);
-
-    // 阶段C: 变红色 (大幅增加红，大幅减少绿和蓝)
-    // 这是一个鲜艳的枫红色
     vec3 turnRed = vec3(1.6, 0.3, 0.2);
-    // 应用颜色
+    
     albedoTexture.rgb *= adjustLeavesCol(stayGreen, turnOrange, turnRed);
     albedoTexture.rgb = adjustSaturation(albedoTexture.rgb, 1.1);
   } else if (lables == 2) {
@@ -530,7 +512,7 @@ void main() {
   }
   vec3 sceneColor = light_pcf * (diffuse + specular) + ambient;
 
-  // --- 计算体积光 ---
+  // --- Calculate volumetric light ---
 
   vec3 volumetricLight = vec3(0.0);
   float a = 1.0;

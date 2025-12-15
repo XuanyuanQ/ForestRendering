@@ -10,15 +10,15 @@ layout(location = 9) in vec4 instanceMatrix3;
 layout(location = 10) in vec4 instanceMatrix4;
 uniform vec3 camera_position;
 
-// 光源参数
+
 uniform vec3 light_position;
 uniform mat4 vertex_model_to_world;
 uniform mat4 vertex_world_to_view;
 uniform mat4 vertex_view_to_projection;
 
-uniform float u_Time;           // 全局时间
-uniform vec3 u_TreeCrownCenter; // 树冠中心点 (粒子发射源)
-uniform vec3 u_TreeCrownSize;   // 树冠大小范围 (例如 x=5, y=3, z=5)
+uniform float u_Time;           // Global Time
+uniform vec3 u_TreeCrownCenter; // Center point of the tree canopy (particle emission source)
+uniform vec3 u_TreeCrownSize;   // Tree crown size range (e.g., x=5, y=3, z=5)
 
 out VS_OUT {
   vec3 normal;
@@ -65,36 +65,35 @@ void main() {
 	float heightOffset = 1.0 * (wave1 + wave2);
 	model_pos.y += heightOffset + 4.0;
 	float id = float(gl_InstanceID);
-	// --- 1. 生命周期的管理 (关键) ---
-	// 我们希望叶子源源不断地产生。
-	// 假设每片叶子的寿命是 10秒。
+	// --- 1. Lifecycle Management ---
 	float leafLifeSpan = 50.0;
-	// 利用时间偏移，让不同 ID 的叶子在不同时间出生
-	float birthTime = id * 0.5; // 每隔 0.1秒出生一片
+	// By using time offset,
+	// leaves with different IDs are generated at different times.
+	float birthTime = id * 0.5;
 	float localizedTime = u_Time - birthTime;
 
-	// 计算当前叶子处于生命周期的哪个阶段 (0.0 = 刚出生, 1.0 = 该消失了)
-	// 使用 mod 实现循环播放
+	// Calculate the current stage of a leaf's lifecycle (0.0 = newly born, 1.0 = about to disappear)
+	// Use mod to implement loop
 	float lifePhase = mod(localizedTime, leafLifeSpan) / leafLifeSpan;
 
-    // --- 2. 确定出生位置 (随机在树冠内) ---
+    // --- 2. Determine birth location  ---
     vec3 spawnOffset;
 	spawnOffset.x = (random(vec2(id, 1.0)) - 0.5) * u_TreeCrownSize.x;
 	spawnOffset.y = (random(vec2(id, 2.0)) - 0.5) * u_TreeCrownSize.y;
 	spawnOffset.z = (random(vec2(id, 3.0)) - 0.5) * u_TreeCrownSize.z;
 	vec3 startPosition = u_TreeCrownCenter + spawnOffset;
 //	vec3 finalVertexPos = vec3(100.0);
-  // --- 3. 计算下落动画 ---
+  // --- 3. Calculate the falling animation ---
   vec3 currentPos = startPosition;
-  // Y轴：匀速下落 (也可以加上重力加速)
+  // Y-axis: Uniform falling speed
 	float dropSpeed =
-	pow(0.8 * random(vec2(id, 4.0)), 2.0) * u_Time + 1.0; // 随机速度
+	pow(0.8 * random(vec2(id, 4.0)), 2.0) * u_Time + 1.0; // Random speed
 	currentPos.y -= lifePhase * leafLifeSpan * dropSpeed;
 	float new_height = model_pos.y + currentPos.y;
 	vec3 CalPos = model_pos.xyz + currentPos;
 	//float boundary = 40;
 	if (new_height > model_pos.y) {
-		// XZ轴：随风飘荡 (正弦波)
+		//XZ axis: Drifting with the wind (sine wave)
 		float wobbleFreq = 0.4;
 		float wobbleAmp = 10.5;
 		currentPos.x += sin(u_Time * wobbleFreq + id) * wobbleAmp;
@@ -102,8 +101,7 @@ void main() {
 	} else {
 		new_height = model_pos.y;
 	}
-   // --- 4. (可选) 落地后隐藏 ---
-   // 如果掉到地面以下，可以把它缩放到 0 看不见，等待下一次循环重生
+   // --- 4.  Hide after landing ---
     float scale = 1.0;
 //	if (CalPos.z > boundary || CalPos.z < -boundary) {
 //	   // 	finalVertexPos = model_pos.xyz;
@@ -113,14 +111,14 @@ void main() {
 //	   scale = 0.0;
 //	 }
 		
-  //新增落地后缩放消失
+  //The disappears after the new landing.
   float boundary = 40.0;
-  float fadeMargin = 10.0; // 边缘缓冲距离
-  // A. 时间淡出: 生命最后 20% 缩小
+  float fadeMargin = 10.0;
+  // A. Time fades out: The last 20% of life shrinks.
   if (lifePhase > 0.8) {
 	  scale *= (1.0 - (lifePhase - 0.8) / 0.2);
   }
-  // B. 边界淡出: 接近边界时缩小，替代原来的直接消失
+  // B. Boundary fade-out: Shrinks as it approaches the boundary,
   float distZ = abs(CalPos.z);
   float distX = abs(CalPos.x);
   if (distZ > (boundary - fadeMargin)) {
@@ -133,10 +131,10 @@ void main() {
   vec3 finalVertexPos = model_pos.xyz + currentPos;
   
   vs_out.fV = camera_position - vec3(finalVertexPos.x, new_height, finalVertexPos.z);
-  // add 模拟太阳光：光照方向 = 光源本身的方向向量
   vs_out.fL = light_position;
 
-  //新增落地后缩放消失逻辑，最终位置 = 中心点 + (形状偏移 * 缩放)
+  //The logic for scaling and disappearing after landing is as follows:
+  //final position = center point + (shape offset * scaling).
   vec3 shapeOffset = (vertex_model_to_world * instanceMatrix * vec4(in_position * 0.05, 0.0)).xyz;
   vec3 worldCenterPos = vec3(finalVertexPos.x, new_height, finalVertexPos.z) - shapeOffset;
   vec3 finalWorldPos = worldCenterPos + shapeOffset * scale;
@@ -146,7 +144,7 @@ void main() {
 //		vertex_view_to_projection * vertex_world_to_view *
 //		vec4(vec3(finalVertexPos.x, new_height, finalVertexPos.z) * scale, 1.0);
   if (scale == 0.0) {
-	  gl_Position = vec4(0.0, 0.0, -1000.0, 1.0);// fix 顶点拉伸造
+	  gl_Position = vec4(0.0, 0.0, -1000.0, 1.0);// fix Vertex stretching
   }
 }
 
