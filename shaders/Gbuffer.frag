@@ -478,11 +478,13 @@ vec3 CalculateVolumetricFog(vec3 worldPos, vec3 cameraPos, vec3 sunDir,
   vec3 currentPos = cameraPos + rayDir * stepLength * jitter;
 
   vec3 accumulatedLight = vec3(0.0);
-  float VOLUME_FOG_DENSITY = 0.1;
+  float VOLUME_FOG_DENSITY = 0.01;
 
   float sunIndensity = 1.0 - smoothstep(0.2, -0.1, sunDir.y);
   float dynamicFactor = GetAdaptiveIntensity(currentPos, sunDir, rayDir);
   sunIndensity *= dynamicFactor;
+  float scatter = GetMiePhase(0.8, dot(normalize(sunDir), normalize(rayDir)));
+  // scatter = 1.0;
   float lightPercent = 0.0;
   float hitDistance = length(worldPos - cameraPos);
   for (int i = 0; i < STEPS; ++i) {
@@ -502,7 +504,7 @@ vec3 CalculateVolumetricFog(vec3 worldPos, vec3 cameraPos, vec3 sunDir,
     }
     // }
 
-    lightPercent = mix(lightPercent, shadow, 1.0f / float(i + 1));
+    lightPercent = mix(lightPercent, shadow * scatter, 1.0f / float(i + 1));
     // lightPercent += shadow;
     currentPos += rayDir * stepLength;
   }
@@ -628,7 +630,7 @@ void main() {
   vec3 R = reflect(-L, finalNormal);
   float spec = pow(max(dot(V, R), 0.0), 50.0);
   // vec3 final_color = sceneColor + volumetricLight * (3 * sceneColor);
-  vec3 final_color = sceneColor + volumetricLight * sceneColor * 3;
+  vec3 final_color = sceneColor + volumetricLight * sceneColor * 1;
   // final_color = final_color / (final_color + vec3(1.0));
   final_color = ACESFilm(final_color);
   // final_color = pow(final_color, vec3(1.0 / 1.2));
