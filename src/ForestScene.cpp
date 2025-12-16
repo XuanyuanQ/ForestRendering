@@ -461,9 +461,11 @@ void ForestScene::initShadowMap() {
 
 // renders a falling leaf particle effect. It uses Instancing technology.
 
-void ForestScene::renderPartical(GLuint shaderProgram) {
+void ForestScene::renderPartical(GLuint shaderProgram, bool isGetDepth) {
   glUseProgram(shaderProgram);
 
+  glUniform1i(glGetUniformLocation(shaderProgram, "isGetDepth"),
+              int(isGetDepth));
   // Bind the color texture of the leaves
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, _texLeaf);
@@ -486,6 +488,9 @@ void ForestScene::renderPartical(GLuint shaderProgram) {
       glGetUniformLocation(shaderProgram, "vertex_view_to_projection"), 1,
       GL_FALSE, glm::value_ptr(_camera.GetViewToClipMatrix()));
 
+  glUniformMatrix4fv(
+      glGetUniformLocation(shaderProgram, "light_world_to_clip_matrix"), 1,
+      GL_FALSE, glm::value_ptr(light_world_to_clip_matrix));
   // Set particle motion parameters
   glm::vec3 u_TreeCrownCenter(20.0f, 43.0f, 20.0f);
   glUniform1f(glGetUniformLocation(shaderProgram, "u_Time"), _elapsedTimeS);
@@ -494,6 +499,7 @@ void ForestScene::renderPartical(GLuint shaderProgram) {
   glm::vec3 u_TreeCrownSize(10.0f, 20.0f, 10.0f);
   glUniform3fv(glGetUniformLocation(shaderProgram, "u_TreeCrownSize"), 1,
                glm::value_ptr(u_TreeCrownSize));
+  glUniform1f(glGetUniformLocation(shaderProgram, "isGetDepth"), isGetDepth);
 
   // Lighting parameters
   glUniform3fv(glGetUniformLocation(shaderProgram, "light_position"), 1,
@@ -537,9 +543,9 @@ void ForestScene::renderAllobjects(GLuint shaderProgram) {
   glDrawElements(GL_TRIANGLES, _waveMesh.indices_nb, GL_UNSIGNED_INT, nullptr);
   glBindVertexArray(0);
 
-  // // ================
-  // // 2. render tree
-  // // ================
+  // ================
+  // 2. render tree
+  // ================
   for (auto &t : _trees) {
     if (t.first.find("leaves") != std::string::npos)
       label = 1;
@@ -554,7 +560,8 @@ void ForestScene::renderAllobjects(GLuint shaderProgram) {
 
     glUniform1i(glGetUniformLocation(shaderProgram, "lables"), label);
 
-    // ========== Alpha mask to distinguish between leaves and trunk==========
+    // ========== Alpha mask to distinguish between leaves and
+    // trunk == == == == ==
     glActiveTexture(GL_TEXTURE0);
     if (label == 1) // leaves
     {
@@ -703,6 +710,9 @@ void ForestScene::renderGbuffer() {
     glUniform1i(glGetUniformLocation(_gBufferShader, "ssaoBlur"), 12);
 
     renderAllobjects(_gBufferShader);
+    if (_isWindEnabled) {
+      renderPartical(_particelShader);
+    }
 #endif
   }
   // glBindFramebuffer(GL_FRAMEBUFFER, 0);
@@ -764,8 +774,6 @@ void ForestScene::renderShadowMap(GLuint FBO) {
     renderAllobjects(_shadowMapShader);
   }
 #else
-  glUniform1i(glGetUniformLocation(_shadowMapShader, "isGbufferDepth"),
-              int(isGbufferDepth));
 
   glUniformMatrix4fv(
       glGetUniformLocation(_shadowMapShader, "light_world_to_clip_matrix"), 1,
@@ -779,6 +787,9 @@ void ForestScene::renderShadowMap(GLuint FBO) {
       GL_FALSE, glm::value_ptr(_camera.GetViewToClipMatrix()));
 
   renderAllobjects(_shadowMapShader);
+  if (_isWindEnabled) {
+    renderPartical(_particelShader, true);
+  }
 #endif
   // #if SSAO
 
@@ -1090,22 +1101,21 @@ void ForestScene::render(GLFWwindow *window) {
   // gbufffer_w = w;
   // gbufffer_h = h;
   glViewport(0, 0, w, h);
-  std::cout << "gbufffer_w:" << w << "gbufffer_h:" << h << std::endl;
+  // std::cout << "gbufffer_w:" << w << "gbufffer_h:" << h << std::endl;
   _windowManager.NewImGuiFrame();
   glClear(GL_DEPTH_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 
   bonobo::changePolygonMode(_polygonMode);
   renderShadowMap(shadowFBO);
-  renderShadowMap(gbufferFBO);
-  renderSSAO(_SSAOShader);
-  renderSSAO(_SSAOBlurShader);
+  if (_applySSAO) {
+    renderShadowMap(gbufferFBO);
+    renderSSAO(_SSAOShader);
+    renderSSAO(_SSAOBlurShader);
+  }
 
   glViewport(0, 0, w, h);
   renderSkybox(_camera.GetWorldToViewMatrix(), _camera.GetViewToClipMatrix());
   renderGbuffer();
-  if (_isWindEnabled) {
-    renderPartical(_particelShader);
-  }
 
   bonobo::changeCullMode(_cullMode);
 

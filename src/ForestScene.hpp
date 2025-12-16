@@ -64,7 +64,7 @@ private:
   void renderShadowMap(GLuint FBO);
   void renderGbuffer();
   void renderAllobjects(GLuint shaderProgram);
-  void renderPartical(GLuint shaderProgram);
+  void renderPartical(GLuint shaderProgram, bool isGetDepth = false);
   void renderSSAO(GLuint shaderProgram);
 
   std::vector<glm::vec4> getFrustumCornersWorldSpace(const glm::mat4 &proj,
