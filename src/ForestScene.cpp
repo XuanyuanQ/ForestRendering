@@ -15,7 +15,7 @@ ForestScene::ForestScene(WindowManager &windowManager)
                   static_cast<float>(config::resolution_y),
               0.01f, 1000.0f),
       _isPaused(false), _applyShadow(false), _sunTime(0.0f), _daySpeed(0.5f),
-      _isWindEnabled(false), _windStrength(0.5f) {
+      _isWindEnabled(false), _windStrength(0.25f) {
   _isVolumetricLight = false;
   _applySSAO = false;
   _camera.mWorld.SetTranslate(glm::vec3(0.0f, 10.0f, 20.0f));
@@ -464,6 +464,9 @@ void ForestScene::initShadowMap() {
 void ForestScene::renderPartical(GLuint shaderProgram, bool isGetDepth) {
   glUseProgram(shaderProgram);
 
+  glUniform1f(glGetUniformLocation(shaderProgram, "wind_strength"),
+              _windStrength * 2.5);
+
   glUniform1i(glGetUniformLocation(shaderProgram, "isGetDepth"),
               int(isGetDepth));
   // Bind the color texture of the leaves
@@ -499,7 +502,7 @@ void ForestScene::renderPartical(GLuint shaderProgram, bool isGetDepth) {
   glm::vec3 u_TreeCrownSize(10.0f, 20.0f, 10.0f);
   glUniform3fv(glGetUniformLocation(shaderProgram, "u_TreeCrownSize"), 1,
                glm::value_ptr(u_TreeCrownSize));
-  glUniform1f(glGetUniformLocation(shaderProgram, "isGetDepth"), isGetDepth);
+  glUniform1i(glGetUniformLocation(shaderProgram, "isGetDepth"), isGetDepth);
 
   // Lighting parameters
   glUniform3fv(glGetUniformLocation(shaderProgram, "light_position"), 1,

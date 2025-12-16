@@ -21,6 +21,7 @@ uniform vec3 u_TreeCrownCenter; // Center point of the tree canopy (particle
                                 // emission source)
 uniform vec3 u_TreeCrownSize;   // Tree crown size range (e.g., x=5, y=3, z=5)
 uniform int isGetDepth;
+uniform float wind_strength;
 out VS_OUT {
   vec3 normal;
   vec2 texcoord;
@@ -38,13 +39,6 @@ float waveFun(float time, float A, float f, float p, float k, vec2 D,
               vec3 point) {
   float a = sin((D.x * point.x + (D.y) * point.z) * f + time * p) * 0.5 + 0.5;
   return A * pow(a, k);
-}
-
-float derivativeMain(float time, float A, float f, float p, float k, vec2 D,
-                     vec3 point) {
-  float wave = waveFun(time, A, f, p, max(0, k - 1.0), D, point);
-  return 0.5 * k * f * wave *
-         cos((D.x * point.x + (D.y) * point.z) * f + time * p);
 }
 
 void main() {
@@ -89,14 +83,15 @@ void main() {
   // Y-axis: Uniform falling speed
   float dropSpeed =
       pow(0.8 * random(vec2(id, 4.0)), 2.0) * u_Time + 1.0; // Random speed
+  dropSpeed = wind_strength * dropSpeed;
   currentPos.y -= lifePhase * leafLifeSpan * dropSpeed;
   float new_height = model_pos.y + currentPos.y;
   vec3 CalPos = model_pos.xyz + currentPos;
   // float boundary = 40;
   if (new_height > model_pos.y) {
     // XZ axis: Drifting with the wind (sine wave)
-    float wobbleFreq = 0.4;
-    float wobbleAmp = 10.5;
+    float wobbleFreq = wind_strength * 0.4;
+    float wobbleAmp = wind_strength * 10.5;
     currentPos.x += sin(u_Time * wobbleFreq + id) * wobbleAmp;
     currentPos.z += cos(u_Time * wobbleFreq + id * 1.5) * wobbleAmp;
   } else {
@@ -104,15 +99,6 @@ void main() {
   }
   // --- 4.  Hide after landing ---
   float scale = 1.0;
-  //	if (CalPos.z > boundary || CalPos.z < -boundary) {
-  //	   // 	finalVertexPos = model_pos.xyz;
-  //	   scale = 0.0;
-  //	 } else if (CalPos.x > boundary || CalPos.x < -boundary) {
-  //	   // finalVertexPos = model_pos.xyz;
-  //	   scale = 0.0;
-  //	 }
-
-  // The disappears after the new landing.
   float boundary = 40.0;
   float fadeMargin = 10.0;
   // A. Time fades out: The last 20% of life shrinks.
