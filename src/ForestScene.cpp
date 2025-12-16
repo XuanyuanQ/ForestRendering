@@ -1103,7 +1103,10 @@ void ForestScene::render(GLFWwindow *window) {
   glViewport(0, 0, w, h);
   renderSkybox(_camera.GetWorldToViewMatrix(), _camera.GetViewToClipMatrix());
   renderGbuffer();
-  renderPartical(_particelShader);
+  if (_isWindEnabled) {
+    renderPartical(_particelShader);
+  }
+
   bonobo::changeCullMode(_cullMode);
 
   // 3. ImGui

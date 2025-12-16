@@ -1,10 +1,10 @@
 #version 410
 
 layout(std140) uniform Shadows {
-  mat4 lightSpaceMatrices[16];     // 16个矩阵
-  float cascadePlaneDistances[16]; // 16个分割距离
-  vec4 lightDir;                   // 占位，无用
-  int cascadeCount;                // 级联数量
+  mat4 lightSpaceMatrices[16];
+  float cascadePlaneDistances[16];
+  vec4 lightDir;
+  int cascadeCount;
 };
 
 uniform sampler2D txture_alpha;
@@ -268,7 +268,6 @@ void calculateTerrain(in vec4 albedoTexture, in vec3 L, in vec3 V, in vec3 N,
   }
 }
 
-// 计算当前像素应该用哪一层级联
 int CalculateCascadeLayer(vec3 fragPosWorld, mat4 viewMatrix) {
   vec4 fragPosViewSpace = viewMatrix * vec4(fragPosWorld, 1.0);
   float depthValue = abs(fragPosViewSpace.z);
@@ -280,7 +279,7 @@ int CalculateCascadeLayer(vec3 fragPosWorld, mat4 viewMatrix) {
       break;
     }
   }
-  // 如果超过了最远距离，就用最后一层
+
   if (layer == -1) {
     layer = cascadeCount;
   }
@@ -290,33 +289,23 @@ int CalculateCascadeLayer(vec3 fragPosWorld, mat4 viewMatrix) {
 
 float ShadowCalculation(vec3 fragPosWorld, vec3 normal, vec3 L,
                         vec2 shadowmap_texel_size, int ispcf) {
-  // 1. 选层 (0, 1, 2...)
+
   int layer = CalculateCascadeLayer(fragPosWorld, vertex_world_to_view);
-  // 2. 坐标转换：世界 -> 对应层的光照空间
+
   vec4 fragPosLightSpace = lightSpaceMatrices[layer] * vec4(fragPosWorld, 1.0);
 
-  // 3. 透视除法 (虽然正交投影w是1，但这步是标准流程)
   vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
 
-  // 4. 映射到 [0, 1]
   projCoords = projCoords * 0.5 + 0.5;
-  // return texture(shadow_Array, vec3(projCoords.xy, float(layer))).r;
-  // 5. 检查是否超出视锥远平面
-  // 注意：因为我们设置了 CLAMP_TO_BORDER 白色，这步其实可以省，但加上保险
-  if (projCoords.z > 1.0)
-    return 0.0; // 无阴影
 
-  // 6. 计算 Bias (防止阴影波纹)
-  // 每一层的精度不同，Bias 最好也随 layer 调整。层级越高(越远)，Bias 可以越小
+  if (projCoords.z > 1.0)
+    return 0.0;
+
   float bias = max(0.005 * (1.0 - dot(normal, L)), 0.0005);
   if (layer == cascadeCount)
     bias *= 0.5;
-
-  // 7. 【核心采样】
-  // 构造 vec3 坐标：xy 是纹理坐标，z 是层级索引(必须是 float)
   float currentDepth = projCoords.z;
 
-  // --- PCF 采样 (3x3 平滑) ---
   float shadow = 0.0;
   if (ispcf == 0) {
     float pcfDepth = texture(shadow_Array, vec3(projCoords.xy, float(layer))).r;
@@ -324,7 +313,7 @@ float ShadowCalculation(vec3 fragPosWorld, vec3 normal, vec3 L,
   } else {
     for (int x = -1; x <= 1; ++x) {
       for (int y = -1; y <= 1; ++y) {
-        // 注意这里的 vec3 构造方式
+
         float pcfDepth =
             texture(shadow_Array,
                     vec3(projCoords.xy + vec2(x, y) * shadowmap_texel_size,

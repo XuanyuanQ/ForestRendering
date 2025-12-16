@@ -8,10 +8,8 @@ uniform sampler2D noiseTexture;
 in vec2 TexCoords;
 // uniform vec3 samples[64];
 layout(std140) uniform SSAOBlock {
-  vec4 samples[64]; // 占用 64 * 16 = 1024 字节
-  int kernelSize1;  // 对应你的 kernalIndex，通常用来控制循环次数
-                    // 占用 4 字节
-                    // GLSL 会自动在末尾填充 12 字节，补齐到 16 字节对齐
+  vec4 samples[64];
+  int kernelSize1;
 };
 
 // parameters (you'd probably want to use them as uniforms to more easily tweak
