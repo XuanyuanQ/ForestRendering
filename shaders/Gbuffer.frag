@@ -392,9 +392,9 @@ vec3 adjustSaturation(vec3 color, float saturation) {
 }
 vec3 adjustLeavesCol(vec3 stayGreen, vec3 turnOrange, vec3 turnRed) {
 
-	float rawCos = cos(float(v_InstanceID));
-	float noise = 1.6 * random(float(v_VertexID)) * (rawCos * 0.5 + 0.5);
-	
+  float rawCos = cos(float(v_InstanceID));
+  float noise = 1.6 * random(float(v_VertexID)) * (rawCos * 0.5 + 0.5);
+
   // pow(noise, 2.5) means that most results will be relatively small (leaning
   // towards green), Only when the noise approaches 1.0 will the results rapidly
   // increase (turn red). This matches the feeling of "early autumn": mostly
@@ -486,6 +486,8 @@ vec3 CalculateVolumetricFog(vec3 worldPos, vec3 cameraPos, vec3 sunDir,
   sunIndensity *= dynamicFactor;
   float lightPercent = 0.0;
   float hitDistance = length(worldPos - cameraPos);
+  float phase = GetMiePhase(0.8, dot(normalize(sunDir), rayDir));
+  phase = min(phase, 1.0);
   for (int i = 0; i < STEPS; ++i) {
     // float shadow = ShadowCalculation(
     //     currentPos, normalize(N), normalize(sunDir), shadowmap_texel_size,
@@ -503,7 +505,7 @@ vec3 CalculateVolumetricFog(vec3 worldPos, vec3 cameraPos, vec3 sunDir,
     }
     // }
 
-    lightPercent = mix(lightPercent, shadow, 1.0f / float(i + 1));
+    lightPercent = mix(lightPercent, phase * shadow, 1.0f / float(i + 1));
     // lightPercent += shadow;
     currentPos += rayDir * stepLength;
   }

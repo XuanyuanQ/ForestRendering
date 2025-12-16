@@ -14,9 +14,9 @@ ForestScene::ForestScene(WindowManager &windowManager)
               static_cast<float>(config::resolution_x) /
                   static_cast<float>(config::resolution_y),
               0.01f, 1000.0f),
-      _isPaused(false), _applyShadow(false), _sunTime(0.0f), _daySpeed(0.5f),
-      _isWindEnabled(false), _windStrength(0.25f) {
-  _isVolumetricLight = false;
+      _isPaused(false), _applyShadow(true), _sunTime(0.0f), _daySpeed(0.2f),
+      _isWindEnabled(true), _windStrength(0.25f) {
+  _isVolumetricLight = true;
   _applySSAO = false;
   _camera.mWorld.SetTranslate(glm::vec3(0.0f, 10.0f, 20.0f));
   _camera.mMouseSensitivity = glm::vec2(0.003f);

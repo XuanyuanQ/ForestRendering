@@ -33,5 +33,4 @@ void main() {
     gAlbedo.rgb = vec3(0.95);
     FragColor = vec4(FragPos, 1.0);
   }
-
-} // 写入深度即可
+}
