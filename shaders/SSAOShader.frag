@@ -20,13 +20,13 @@ float bias = 0.0025;
 
 // tile noise texture over screen based on screen dimensions divided by noise
 // size
-const vec2 noiseScale = vec2(1600.0 / 4.0, 900.0 / 4.0);
+// const vec2 noiseScale = vec2(1600.0 / 4.0, 900.0 / 4.0);
 
 uniform mat4 vertex_view_to_projection;
 
 void main() {
   // get input for SSAO algorithm
-
+  vec2 noiseScale = vec2(4.0) / inverse_screen_resolution;
   vec3 fragPos = texture(gPosition, TexCoords).xyz;
   vec3 normal = normalize(texture(gNormal, TexCoords).rgb);
   vec3 randomVec = normalize(texture(noiseTexture, TexCoords * noiseScale).xyz);

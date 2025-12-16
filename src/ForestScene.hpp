@@ -52,30 +52,29 @@ public:
   FPSCameraf &getCamera() { return _camera; }
 
 private:
-  std::vector<InstanceData> generateTreeTransforms(int count, int Width = 100,
-                                                   int Depth = 100);
-
-  GLuint createQuadsForPatch();
   void initShadowMap();
   void initShadowCSM();
   void initGbuffer();
   void initSSAO();
-  void updateLightMatrix(const glm::vec3 light_pos);
+  void initSkybox();
+
   void renderShadowMap(GLuint FBO);
   void renderGbuffer();
   void renderAllobjects(GLuint shaderProgram);
   void renderPartical(GLuint shaderProgram, bool isGetDepth = false);
   void renderSSAO(GLuint shaderProgram);
+  void renderSkybox(glm::mat4 const &view, glm::mat4 const &projection);
 
+  std::vector<InstanceData> generateTreeTransforms(int count, int Width = 100,
+                                                   int Depth = 100);
+  void updateLightMatrix(const glm::vec3 light_pos);
   std::vector<glm::vec4> getFrustumCornersWorldSpace(const glm::mat4 &proj,
                                                      const glm::mat4 &view);
   glm::mat4 getLightSpaceMatrix(const float nearPlane, const float farPlane);
   std::vector<glm::mat4> getLightSpaceMatrices();
-
-  void initSkybox();
-  void renderSkybox(glm::mat4 const &view, glm::mat4 const &projection);
   void generateSSAOKernel();
   void generateNoiseTexture();
+  void Reset(int w, int h);
 
 private:
   std::vector<float> shadowCascadeLevels{25.0f, 80.0f, 200.0f, 500.0f, 1000.0f};
@@ -88,7 +87,6 @@ private:
   ShaderProgramManager _programManager;
 
   // --- resource ID ---
-  GLuint _fallbackShader;
   GLuint _grassShader;
   GLuint _particelShader;
   GLuint _SSAOShader;
@@ -96,14 +94,8 @@ private:
 
   GLuint _waveShader;
 
-  GLuint _tessHeightMapShader;
   GLuint _shadowMapShader;
   GLuint _gBufferShader;
-  GLuint _lightContributionShader;
-  GLuint _resolve_deferred_shader;
-
-  GLuint _sunTestShader;
-  GLuint _forestTestShader;
 
   // --- Texture ---
   GLuint _texBark;
@@ -128,8 +120,6 @@ private:
   Node _quadNode;
   bonobo::mesh_data _waveMesh; //
   bonobo::mesh_data _particelMesh;
-  bonobo::mesh_data _frogMesh;
-  // Node _particelNode;
 
   float _elapsedTimeS;
   bool _isLeavesMesh;
@@ -160,31 +150,14 @@ private:
   float lightZ{100.0f};
 
   // shadow
-  GLuint shadowFBO;
-  GLuint shadowMap;
-  GLuint shadowArray;
+  GLuint shadowFBO = 0;
+  GLuint shadowMap = 0;
+  GLuint shadowArray = 0;
   glm::mat4 light_world_to_clip_matrix = glm::mat4(1.0f);
 
   // gbuffer
-  GLuint gbufferFBO;
-  unsigned int gPosition, gNormal, gAlbedo, gDepth;
-
-  // light contribution
-  bonobo::mesh_data lightMesh;
-  Node lightgeometry;
-  GLuint lightFBO;
-  GLuint lDiffuse;
-  GLuint lAmbient;
-  GLuint lSpecular;
-  GLuint lboDepth;
-
-  GLuint fullScreenVAO;
-
-  // test
-  unsigned int cubeVAO = 0;
-  unsigned int cubeVBO = 0;
-  GLuint _terrainVao;
-  GLuint _terrainVbo;
+  GLuint gbufferFBO = 0;
+  unsigned int gPosition = 0, gNormal = 0, gAlbedo = 0, gDepth = 0;
 
   // control wind
   bool _isWindEnabled;
@@ -197,12 +170,12 @@ private:
   std::vector<glm::vec3> ssaoKernel;
   GLuint noiseTexture;
 
-  GLuint ssaoFBO;
-  GLuint ssaoTexture;
-  GLuint ssaoVAO;
-  GLuint uboSSAO;
+  GLuint ssaoFBO = 0;
+  GLuint ssaoTexture = 0;
+  GLuint ssaoVAO = 0;
+  GLuint uboSSAO = 0;
   SSAOData ssaoData;
 
-  unsigned int ssaoBlurFBO;
-  GLuint ssaoColorBufferBlur;
+  unsigned int ssaoBlurFBO = 0;
+  GLuint ssaoColorBufferBlur = 0;
 };

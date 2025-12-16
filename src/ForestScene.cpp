@@ -31,111 +31,12 @@ ForestScene::ForestScene(WindowManager &windowManager)
   _cullMode = bonobo::cull_mode_t::disabled;
   _polygonMode = bonobo::polygon_mode_t::fill;
   _showGui = true;
-  _fallbackShader = 0;
   _instanceVBO = 0;
 }
 
 ForestScene::~ForestScene() {
   if (_instanceVBO != 0)
     glDeleteBuffers(1, &_instanceVBO);
-}
-GLuint ForestScene::createQuadsForPatch() {
-  float planeVertices[] = {
-      // positions            // normals         // texcoords
-      25.0f,  -0.5f, 25.0f,  0.0f, 1.0f, 0.0f, 25.0f, 0.0f,
-      -25.0f, -0.5f, 25.0f,  0.0f, 1.0f, 0.0f, 0.0f,  0.0f,
-      -25.0f, -0.5f, -25.0f, 0.0f, 1.0f, 0.0f, 0.0f,  25.0f,
-
-      25.0f,  -0.5f, 25.0f,  0.0f, 1.0f, 0.0f, 25.0f, 0.0f,
-      -25.0f, -0.5f, -25.0f, 0.0f, 1.0f, 0.0f, 0.0f,  25.0f,
-      25.0f,  -0.5f, -25.0f, 0.0f, 1.0f, 0.0f, 25.0f, 25.0f};
-  // plane VAO
-  unsigned int planeVBO;
-  unsigned int planeVAO;
-  glGenVertexArrays(1, &planeVAO);
-  glGenBuffers(1, &planeVBO);
-  glBindVertexArray(planeVAO);
-  glBindBuffer(GL_ARRAY_BUFFER, planeVBO);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(planeVertices), planeVertices,
-               GL_STATIC_DRAW);
-  glEnableVertexAttribArray(0);
-  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)0);
-  glEnableVertexAttribArray(1);
-  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float),
-                        (void *)(3 * sizeof(float)));
-  glEnableVertexAttribArray(2);
-  glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float),
-                        (void *)(6 * sizeof(float)));
-  glBindVertexArray(0);
-  _terrainVao = planeVAO;
-  _terrainVbo = planeVBO;
-
-  if (cubeVAO == 0) {
-    float vertices[] = {
-        // back face
-        -1.0f, -1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f, // bottom-left
-        1.0f, 1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 1.0f,   // top-right
-        1.0f, -1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 0.0f,  // bottom-right
-        1.0f, 1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 1.0f, 1.0f,   // top-right
-        -1.0f, -1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f, // bottom-left
-        -1.0f, 1.0f, -1.0f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f,  // top-left
-        // front face
-        -1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, // bottom-left
-        1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f,  // bottom-right
-        1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,   // top-right
-        1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,   // top-right
-        -1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f,  // top-left
-        -1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, // bottom-left
-        // left face
-        -1.0f, 1.0f, 1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f,   // top-right
-        -1.0f, 1.0f, -1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 1.0f,  // top-left
-        -1.0f, -1.0f, -1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, // bottom-left
-        -1.0f, -1.0f, -1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f, // bottom-left
-        -1.0f, -1.0f, 1.0f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f,  // bottom-right
-        -1.0f, 1.0f, 1.0f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f,   // top-right
-                                                            // right face
-        1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,     // top-left
-        1.0f, -1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f,   // bottom-right
-        1.0f, 1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f,    // top-right
-        1.0f, -1.0f, -1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f,   // bottom-right
-        1.0f, 1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,     // top-left
-        1.0f, -1.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,    // bottom-left
-        // bottom face
-        -1.0f, -1.0f, -1.0f, 0.0f, -1.0f, 0.0f, 0.0f, 1.0f, // top-right
-        1.0f, -1.0f, -1.0f, 0.0f, -1.0f, 0.0f, 1.0f, 1.0f,  // top-left
-        1.0f, -1.0f, 1.0f, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f,   // bottom-left
-        1.0f, -1.0f, 1.0f, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f,   // bottom-left
-        -1.0f, -1.0f, 1.0f, 0.0f, -1.0f, 0.0f, 0.0f, 0.0f,  // bottom-right
-        -1.0f, -1.0f, -1.0f, 0.0f, -1.0f, 0.0f, 0.0f, 1.0f, // top-right
-        // top face
-        -1.0f, 1.0f, -1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, // top-left
-        1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,   // bottom-right
-        1.0f, 1.0f, -1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f,  // top-right
-        1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,   // bottom-right
-        -1.0f, 1.0f, -1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, // top-left
-        -1.0f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f   // bottom-left
-    };
-    // vertices = vertices * 0.1;
-    glGenVertexArrays(1, &cubeVAO);
-    glGenBuffers(1, &cubeVBO);
-    // fill buffer
-    glBindBuffer(GL_ARRAY_BUFFER, cubeVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-    // link vertex attributes
-    glBindVertexArray(cubeVAO);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float),
-                          (void *)0);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float),
-                          (void *)(3 * sizeof(float)));
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float),
-                          (void *)(6 * sizeof(float)));
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindVertexArray(0);
-  }
-  return _terrainVao;
 }
 
 std::vector<InstanceData>
@@ -279,29 +180,17 @@ void ForestScene::updateLightMatrix(const glm::vec3 light_pos) {
 }
 
 void ForestScene::initGbuffer() {
+  // promise delete bofore create
+  {
+    glDeleteTextures(1, &gDepth);
+    glDeleteTextures(1, &gPosition);
+    glDeleteTextures(1, &gNormal);
+    glDeleteTextures(1, &gAlbedo);
+    glDeleteFramebuffers(1, &gbufferFBO);
+  }
 
   glGenFramebuffers(1, &gbufferFBO);
   glBindFramebuffer(GL_FRAMEBUFFER, gbufferFBO);
-
-  // Create and configure depth textures
-  glGenTextures(1, &gDepth);
-  glBindTexture(GL_TEXTURE_2D, gDepth);
-
-  // Use GL_DEPTH24_STENCIL8
-  // floating point depth provides higher precision and reduces ripple
-  // when reconstructing world coordinates over long distances.
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH24_STENCIL8, gbufffer_w, gbufffer_h, 0,
-               GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-
-  // Filtering
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-  // Wrapping
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-  // Bind textures to depth attachment points of FBOs
 
   glGenTextures(1, &gPosition);
   glBindTexture(GL_TEXTURE_2D, gPosition);
@@ -361,8 +250,20 @@ void ForestScene::initGbuffer() {
 }
 
 void ForestScene::initSSAO() {
-  glGenVertexArrays(1, &ssaoVAO);
-  glBindVertexArray(ssaoVAO);
+
+  if (ssaoVAO == 0) {
+    glGenVertexArrays(1, &ssaoVAO);
+    glBindVertexArray(ssaoVAO);
+  }
+
+  // promise delete bofore create
+  {
+    glDeleteTextures(1, &ssaoTexture);
+    glDeleteFramebuffers(1, &ssaoFBO);
+
+    glDeleteTextures(1, &ssaoColorBufferBlur);
+    glDeleteFramebuffers(1, &ssaoBlurFBO);
+  }
 
   glGenFramebuffers(1, &ssaoFBO);
   glBindFramebuffer(GL_FRAMEBUFFER, ssaoFBO);
@@ -427,9 +328,9 @@ void ForestScene::initShadowCSM() {
 }
 
 void ForestScene::initShadowMap() {
+
   // 1. create FBO
   glGenFramebuffers(1, &shadowFBO);
-
   // 2. crete depth texture
   glGenTextures(1, &shadowMap);
   glBindTexture(GL_TEXTURE_2D, shadowMap);
@@ -668,8 +569,6 @@ void ForestScene::renderGbuffer() {
         glGetUniformLocation(_gBufferShader, "inverse_screen_resolution"),
         1.0f / static_cast<float>(gbufffer_w),
         1.0f / static_cast<float>(gbufffer_h));
-    glUniform3fv(glGetUniformLocation(_gBufferShader, "light_direction"), 1,
-                 glm::value_ptr(lightgeometry.get_transform().GetFront()));
     glUniform1i(glGetUniformLocation(_gBufferShader, "isApplyShadow"),
                 _applyShadow);
     glUniform1i(glGetUniformLocation(_gBufferShader, "isVolumetricLight"),
@@ -698,8 +597,6 @@ void ForestScene::renderGbuffer() {
         glGetUniformLocation(_gBufferShader, "inverse_screen_resolution"),
         1.0f / static_cast<float>(SHADOW_WIDTH),
         1.0f / static_cast<float>(SHADOW_HEIGHT));
-    glUniform3fv(glGetUniformLocation(_gBufferShader, "light_direction"), 1,
-                 glm::value_ptr(lightgeometry.get_transform().GetFront()));
     glUniform1i(glGetUniformLocation(_gBufferShader, "isApplyShadow"),
                 _applyShadow);
     glUniform1i(glGetUniformLocation(_gBufferShader, "isVolumetricLight"),
@@ -950,7 +847,6 @@ bool ForestScene::setup(GLFWwindow *window) {
   glBindBuffer(GL_ARRAY_BUFFER, 0);
   _particelMesh =
       parametric_shapes::createQuad(100.0f, 100.0f, 10, 10, particelVBO);
-  _frogMesh = parametric_shapes::createQuad(100.0f, 100.0f, 1, 1);
 
   // ----------------------------------------------------------------
   // 4. load texture
@@ -1019,11 +915,8 @@ bool ForestScene::setup(GLFWwindow *window) {
       config::resources_path("forested-floor/textures/iceland_heightmap.png"));
   //   _quadNode.add_texture("diffuse_texture", _floor_tex, GL_TEXTURE_2D);
 
-  createQuadsForPatch();
   initSkybox();
 
-  glGenVertexArrays(1, &fullScreenVAO);
-  glBindVertexArray(fullScreenVAO);
   glfwGetFramebufferSize(window, &gbufffer_w, &gbufffer_h);
   // gbufffer_w = 2560;
   // gbufffer_h = 1600;
@@ -1093,7 +986,6 @@ void ForestScene::update(double deltaTimeUs) {
   }
 
   updateLightMatrix(_lightPosition);
-  // lightgeometry.get_transform().SetTranslate(_lightPosition);
   getLightSpaceMatrices();
   if (_inputHandler.GetKeycodeState(GLFW_KEY_F2) & JUST_RELEASED)
     _showGui = !_showGui;
@@ -1102,8 +994,7 @@ void ForestScene::update(double deltaTimeUs) {
 void ForestScene::render(GLFWwindow *window) {
   int w, h;
   glfwGetFramebufferSize(window, &w, &h);
-  // gbufffer_w = w;
-  // gbufffer_h = h;
+  Reset(w, h);
   glViewport(0, 0, w, h);
   // std::cout << "gbufffer_w:" << w << "gbufffer_h:" << h << std::endl;
   _windowManager.NewImGuiFrame();
@@ -1319,4 +1210,14 @@ void ForestScene::renderSSAO(GLuint shaderProgram) {
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
   glUseProgram(0);
   glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+void ForestScene::Reset(int w, int h) {
+  if (gbufffer_w == w && gbufffer_h == h) {
+    return;
+  }
+  gbufffer_w = w;
+  gbufffer_h = h;
+  initGbuffer();
+  initSSAO();
 }
