@@ -90,8 +90,8 @@ void main() {
   // float boundary = 40;
   if (new_height > model_pos.y) {
     // XZ axis: Drifting with the wind (sine wave)
-    float wobbleFreq = wind_strength * 0.4;
-    float wobbleAmp = wind_strength * 10.5;
+    float wobbleFreq = 0.4 * wind_strength;
+    float wobbleAmp = 10.5;
     currentPos.x += sin(u_Time * wobbleFreq + id) * wobbleAmp;
     currentPos.z += cos(u_Time * wobbleFreq + id * 1.5) * wobbleAmp;
   } else {

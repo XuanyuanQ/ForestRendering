@@ -777,7 +777,8 @@ void ForestScene::renderShadowMap(GLuint FBO) {
     renderAllobjects(_shadowMapShader);
   }
 #else
-
+  glUniform1i(glGetUniformLocation(_shadowMapShader, "isGbufferDepth"),
+              int(isGbufferDepth));
   glUniformMatrix4fv(
       glGetUniformLocation(_shadowMapShader, "light_world_to_clip_matrix"), 1,
       GL_FALSE, glm::value_ptr(light_world_to_clip_matrix));
@@ -1024,8 +1025,8 @@ bool ForestScene::setup(GLFWwindow *window) {
   glGenVertexArrays(1, &fullScreenVAO);
   glBindVertexArray(fullScreenVAO);
   glfwGetFramebufferSize(window, &gbufffer_w, &gbufffer_h);
-  gbufffer_w = 2560;
-  gbufffer_h = 1600;
+  // gbufffer_w = 2560;
+  // gbufffer_h = 1600;
 #if CSM
   initShadowCSM();
 #else
