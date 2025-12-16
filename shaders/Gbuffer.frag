@@ -392,8 +392,9 @@ vec3 adjustSaturation(vec3 color, float saturation) {
 }
 vec3 adjustLeavesCol(vec3 stayGreen, vec3 turnOrange, vec3 turnRed) {
 
-  float noise = 1.6 * random(float(v_VertexID)) * cos(float(v_InstanceID));
-
+	float rawCos = cos(float(v_InstanceID));
+	float noise = 1.6 * random(float(v_VertexID)) * (rawCos * 0.5 + 0.5);
+	
   // pow(noise, 2.5) means that most results will be relatively small (leaning
   // towards green), Only when the noise approaches 1.0 will the results rapidly
   // increase (turn red). This matches the feeling of "early autumn": mostly
