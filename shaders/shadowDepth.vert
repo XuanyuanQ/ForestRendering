@@ -1,12 +1,16 @@
 #version 410
 
 layout(location = 0) in vec3 vertex;
+layout(location = 1) in vec3 normal;
 layout(location = 2) in vec3 texcoord;
+layout(location = 3) in vec3 tangent;
+layout(location = 4) in vec3 binormal;
 
 layout(location = 7) in vec4 instanceMatrix1;
 layout(location = 8) in vec4 instanceMatrix2;
 layout(location = 9) in vec4 instanceMatrix3;
 layout(location = 10) in vec4 instanceMatrix4;
+layout(location = 11) in float instanceWindsSpeed;
 
 uniform int lables;
 uniform int isGbufferDepth;
@@ -23,6 +27,25 @@ uniform float wind_strength;
 out VS_OUT { vec2 texcoord; }
 vs_out;
 
+out vec3 FragPos;
+out vec3 Normal;
+
+float random(float seed) { return fract(sin(seed) * 43758.5453123); }
+
+// Rotation matrix auxiliary function
+mat3 angleAxis(float angle, vec3 axis) {
+  axis = normalize(axis);
+  float s = sin(angle);
+  float c = cos(angle);
+  float oc = 1.0 - c;
+  return mat3(oc * axis.x * axis.x + c, oc * axis.x * axis.y - axis.z * s,
+              oc * axis.z * axis.x + axis.y * s,
+              oc * axis.x * axis.y + axis.z * s, oc * axis.y * axis.y + c,
+              oc * axis.y * axis.z - axis.x * s,
+              oc * axis.z * axis.x - axis.y * s,
+              oc * axis.y * axis.z + axis.x * s, oc * axis.z * axis.z + c);
+}
+
 float waveFun(float time, float A, float f, float p, float k, vec2 D,
               vec3 point) {
   float a = sin((D.x * point.x + (D.y) * point.z) * f + time * p) * 0.5 + 0.5;
@@ -36,7 +59,59 @@ float derivativeMain(float time, float A, float f, float p, float k, vec2 D,
          cos((D.x * point.x + (D.y) * point.z) * f + time * p);
 }
 
+void applyWind(inout vec3 localPos, inout vec3 localNormal,
+               inout vec3 localTangent, int labelType, float windPower,
+               float time, float seed) {
+
+  if (windPower <= 0.0)
+    return;
+
+  switch (labelType) {
+  case 1: // Leaves
+  {
+    // 1. Macroscopic swaying (simulating tree branch swaying)
+    float swayAngle = sin(time * 1.5 + seed) * 0.1 * windPower;
+    vec3 swayAxis = vec3(0.0, 0.0, 1.0); // arond z
+    mat3 rotSway = angleAxis(swayAngle, swayAxis);
+
+    // 2. Microscopic trembling (simulating the random trembling of leaves)
+    float flutterPhase = dot(localPos, vec3(10.0, 20.0, 30.0));
+    float flutterAngle = sin(time * 15.0 + flutterPhase) * 0.2 * windPower;
+
+    // random axis jitter
+    vec3 flutterAxis = normalize(
+        vec3(random(seed), random(seed + 123.0), random(seed + 456.0)));
+    mat3 rotFlutter = angleAxis(flutterAngle, flutterAxis);
+
+    // 3. Combine and apply
+    mat3 totalRot = rotSway * rotFlutter;
+
+    // Rotate local coordinates and normal/tangent lines
+    localPos = totalRot * localPos;
+    localNormal = totalRot * localNormal;
+    localTangent = totalRot * localTangent;
+    break;
+  }
+
+  case 3: // Grass
+  {
+    float wave = sin(time * 3.0 + seed + localPos.x * 2.0);
+    float bend = pow(max(0.0, localPos.y), 1.5);
+
+    float displacement = wave * bend * 0.5 * windPower;
+    localPos.x += displacement;
+    localPos.z += displacement * 0.5;
+    break;
+  }
+
+  default:
+    break;
+  }
+}
+
 void main() {
+  int v_InstanceID = gl_InstanceID;
+  int v_VertexID = gl_VertexID;
   vs_out.texcoord = texcoord.xy;
   mat4 model_to_world;
   // vs_out.normal_model_to_world = transpose(inverse(model_to_world));
@@ -48,117 +123,45 @@ void main() {
                                instanceMatrix3, instanceMatrix4);
     model_to_world = vertex_model_to_world * instanceMatrix;
   }
-
   float scale = 1.0;
   if (lables == 3) {
-    scale = 0.015;
+    scale = 0.008;
   }
-  // if (lables == 1 || lables == 2) {
-  //   scale = 0.8;
-  // }
+
+  vec3 localPos = vertex * scale;
+  vec3 localNormal = normal;
+  vec3 localTangent = tangent;
+
+  float instanceSpeed = instanceWindsSpeed > 0.0 ? instanceWindsSpeed : 1.0;
+  float finalWind = wind_strength * instanceSpeed;
+
+  applyWind(localPos, localNormal, localTangent, lables, finalWind,
+            elapsed_time_s, float(v_InstanceID));
+
+  world_pos = vec3(model_to_world * vec4(localPos, 1.0));
 
   float time = 1.0;
-  // 计算两个波形叠加
   float wave1 = waveFun(time, 1.0, 0.2, 0.5, 2.0, vec2(-1.0, 0.0), vertex);
   float wave2 = waveFun(time, 0.5, 0.4, 1.3, 2.0, vec2(-0.7, 0.7), vertex);
 
-  // 应用高度偏移
-  // 注意：这里修改的是
-  // worldPos.y，这样不仅位置变了，后续的光照计算也会基于这个新高度
   float heightOffset = 1.0 * (wave1 + wave2);
-  world_pos = vec3(model_to_world * vec4(vertex * scale, 1.0));
   world_pos.y += heightOffset;
-
-  // 添加风吹
-  if (wind_strength > 0.0) {
-    vec3 windDir = normalize(vec3(1.0, 0.0, 0.5)); // 统一风向
-    switch (lables) {
-    case 3: // Grass
-    {
-      float wave =
-          sin(elapsed_time_s * 3.0 + world_pos.x * 2.0 + world_pos.z * 1.0);
-      world_pos.x += wave * wind_strength * 0.2;
-      world_pos.z +=
-          cos(elapsed_time_s * 2.5 + world_pos.x * 3.0) * wind_strength * 0.1;
-      break;
-    }
-
-    case 1: // Leaves
-    {
-      // -------------------------------------------------------------
-      // 1. 去同步
-      float treePhase = world_pos.x * 0.7 + world_pos.z * 0.3;
-
-      // -------------------------------------------------------------
-      // 2. 主摇摆
-      // -------------------------------------------------------------
-      // 频率低 (1.0)，幅度大。
-      // 叠加两个不同频率的 sin 波，模拟风的“阵风”感
-      float sway = sin(elapsed_time_s * 1.0 + treePhase) +
-                   sin(elapsed_time_s * 0.4 + treePhase * 0.8) * 0.5;
-
-      // -------------------------------------------------------------
-      // 3. 叶片颤动
-      // -------------------------------------------------------------
-      // 频率高 (15.0)，幅度小。
-      // 使用 vertex (局部坐标) 参与计算，让同一棵树上的不同叶子动得不一样。
-      float flutter = sin(elapsed_time_s * 15.0 + vertex.x * 10.0 +
-                          vertex.y * 10.0 + vertex.z * 10.0);
-
-      // -------------------------------------------------------------
-      // 4. 弯曲权重
-      // -------------------------------------------------------------
-      // 实现树根 (y=0) 完全不动，中间动一点，树梢动得最厉害
-      float h = max(0.0, vertex.y);
-      float bendFactor = pow(h, 1.5);
-
-      // -------------------------------------------------------------
-      // 5. 合成最终运动
-      // -------------------------------------------------------------
-      // A. 整体倒向风向
-      vec3 swayOffset = windDir * sway * bendFactor * 0.01 * wind_strength;
-
-      // B. 叶子乱颤
-      vec3 flutterOffset = vec3(flutter) * bendFactor * 0.02 * wind_strength;
-
-      world_pos += swayOffset + flutterOffset;
-
-      break;
-    }
-
-      //					case 2: // Bark
-      //					{
-      //						float bendFactor =
-      // max(0.0, vertex.y) * 0.05 * wind_strength;
-      // float sway = sin(elapsed_time_s * 1.5 + world_pos.x);
-      // float windForce = bendFactor + (sway * bendFactor * 0.5);
-      //
-      //						world_pos += windDir *
-      // windForce; 						break;
-      //					}
-
-    default:
-      break;
-    }
-  }
   if (lables == 3) {
     world_pos.y = -world_pos.y;
   }
   if (lables == 1 || lables == 2) {
     world_pos.y += 3.0;
   }
+
   if (isGbufferDepth == 1) {
-    // gl_Position = light_world_to_clip_matrix * vec4(world_pos, 1.0);
+    FragPos = (vertex_world_to_view * vec4(world_pos, 1.0)).xyz;
+    Normal = vec4(transpose(inverse(vertex_world_to_view * model_to_world)) *
+                  vec4(normal, 0.0))
+                 .xyz;
     gl_Position =
         vertex_view_to_projection * vertex_world_to_view * vec4(world_pos, 1.0);
-    // gl_Position = light_world_to_clip_matrix * vec4(world_pos, 1.0);
+
   } else {
     gl_Position = light_world_to_clip_matrix * vec4(world_pos, 1.0);
-    // gl_Position =
-    //     vertex_view_to_projection * vertex_world_to_view *
-    //     vec4(world_pos, 1.0);
   }
-  // gl_Position =
-  //     vertex_view_to_projection * vertex_world_to_view1 *
-  //     vec4(world_pos, 1.0);
 }
