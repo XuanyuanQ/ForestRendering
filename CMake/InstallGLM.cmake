@@ -8,8 +8,8 @@ if (NOT glm_FOUND)
 
 		# GLM does not set its revision version in its number string,
 		# making it impossible to match on it.
-		PATCH_COMMAND ${GIT_EXECUTABLE} reset --hard HEAD # Remove any existing changes before applying the patch (in case patch is applied twice, for example)
-		COMMAND ${GIT_EXECUTABLE} apply ${CMAKE_SOURCE_DIR}/0001-Fix-GLM-version.patch
+		#PATCH_COMMAND ${GIT_EXECUTABLE} reset --hard HEAD # Remove any existing changes before applying the patch (in case patch is applied twice, for example)
+		#COMMAND ${GIT_EXECUTABLE} apply ${CMAKE_SOURCE_DIR}/0001-Fix-GLM-version.patch
 	)
 
 	FetchContent_GetProperties (glm)
