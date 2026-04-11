@@ -18,6 +18,9 @@ if (NOT glm_FOUND)
 		FetchContent_Populate (glm)
 	endif ()
 
+	include (cmake/patch.cmake)
+	force_update_cmake_version("${FETCHCONTENT_BASE_DIR}/glm-src")
+
 	set (glm_INSTALL_DIR "${FETCHCONTENT_BASE_DIR}/glm-install")
 	if (NOT EXISTS "${glm_INSTALL_DIR}")
 		file (MAKE_DIRECTORY ${glm_INSTALL_DIR})
