@@ -27,9 +27,12 @@ if (NOT glm_FOUND)
 	endif ()
 
 	message (STATUS "Setting up CMake for glm…")
+	set (_luggcgl_glm_cmake_args -G "${CMAKE_GENERATOR}")
+	if (CMAKE_GENERATOR_PLATFORM)
+		list (APPEND _luggcgl_glm_cmake_args -A "${CMAKE_GENERATOR_PLATFORM}")
+	endif ()
 	execute_process (
-		COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}"
-		                         -A "${CMAKE_GENERATOR_PLATFORM}"
+		COMMAND ${CMAKE_COMMAND} ${_luggcgl_glm_cmake_args}
 		                         -DCMAKE_INSTALL_PREFIX=${glm_INSTALL_DIR}
 		                         -DCMAKE_BUILD_TYPE=Release
 					 -DGLM_TEST_ENABLE=OFF
@@ -62,5 +65,6 @@ if (NOT glm_FOUND)
 
 	list (APPEND CMAKE_PREFIX_PATH ${glm_INSTALL_DIR}/lib64/cmake)
 
+	unset (_luggcgl_glm_cmake_args)
 	set (glm_INSTALL_DIR)
 endif ()

@@ -23,9 +23,12 @@ if (NOT glfw3_FOUND)
 	endif ()
 
 	message (STATUS "Setting up CMake for glfw…")
+	set (_luggcgl_glfw_cmake_args -G "${CMAKE_GENERATOR}")
+	if (CMAKE_GENERATOR_PLATFORM)
+		list (APPEND _luggcgl_glfw_cmake_args -A "${CMAKE_GENERATOR_PLATFORM}")
+	endif ()
 	execute_process (
-		COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}"
-		                         -A "${CMAKE_GENERATOR_PLATFORM}"
+		COMMAND ${CMAKE_COMMAND} ${_luggcgl_glfw_cmake_args}
 		                         -DGLFW_BUILD_DOCS=OFF
 		                         -DGLFW_BUILD_TESTS=OFF
 		                         -DGLFW_BUILD_EXAMPLES=OFF
@@ -60,5 +63,6 @@ if (NOT glfw3_FOUND)
 
 	list (APPEND CMAKE_PREFIX_PATH ${glfw_INSTALL_DIR}/lib/cmake)
 
+	unset (_luggcgl_glfw_cmake_args)
 	set (glfw_INSTALL_DIR)
 endif ()

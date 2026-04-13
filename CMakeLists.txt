@@ -65,11 +65,30 @@ endif ()
 # To be able to dowload and compile the dependencies
 find_package (Git REQUIRED)
 include (FetchContent)
-set (FETCHCONTENT_BASE_DIR "${PROJECT_SOURCE_DIR}/dependencies" CACHE PATH "Base folder where dependencies are processed." FORCE)
+# FetchContent base directory
+#
+# Historically this project forced FETCHCONTENT_BASE_DIR to live inside the
+# source tree ("${PROJECT_SOURCE_DIR}/dependencies"). That makes builds fragile
+# when switching generators (e.g. Xcode ↔ Unix Makefiles), because CMake keeps
+# generator-specific caches in that directory.
+#
+# Default to a per-build-directory location to avoid generator/cache conflicts.
+set (_LUGGCGL_LEGACY_FETCHCONTENT_BASE_DIR "${PROJECT_SOURCE_DIR}/dependencies")
+set (_LUGGCGL_DEFAULT_FETCHCONTENT_BASE_DIR "${CMAKE_BINARY_DIR}/_deps")
+
+if (DEFINED FETCHCONTENT_BASE_DIR AND FETCHCONTENT_BASE_DIR STREQUAL "${_LUGGCGL_LEGACY_FETCHCONTENT_BASE_DIR}")
+	message (STATUS "Migrating FETCHCONTENT_BASE_DIR from in-source '${FETCHCONTENT_BASE_DIR}' to '${_LUGGCGL_DEFAULT_FETCHCONTENT_BASE_DIR}'")
+	set (FETCHCONTENT_BASE_DIR "${_LUGGCGL_DEFAULT_FETCHCONTENT_BASE_DIR}" CACHE PATH "Base folder where dependencies are processed." FORCE)
+else ()
+	set (FETCHCONTENT_BASE_DIR "${_LUGGCGL_DEFAULT_FETCHCONTENT_BASE_DIR}" CACHE PATH "Base folder where dependencies are processed.")
+endif ()
 
 if (NOT EXISTS "${FETCHCONTENT_BASE_DIR}")
 	file (MAKE_DIRECTORY "${FETCHCONTENT_BASE_DIR}")
 endif ()
+
+unset (_LUGGCGL_LEGACY_FETCHCONTENT_BASE_DIR)
+unset (_LUGGCGL_DEFAULT_FETCHCONTENT_BASE_DIR)
 
 # assimp is used for loading the objects’s models
 set (LUGGCGL_ASSIMP_MIN_VERSION 5.1.0)
@@ -77,6 +96,34 @@ set (LUGGCGL_ASSIMP_DOWNLOAD_VERSION 5.1.2)
 include (CMake/InstallAssimp.cmake)
 find_package (assimp ${LUGGCGL_ASSIMP_MIN_VERSION} REQUIRED)
 link_directories (${ASSIMP_LIBRARY_DIRS})
+
+# assimp's exported target links against 'minizip' on macOS when found via
+# pkg-config, but does not always propagate the corresponding library search
+# path to consumers. Add it explicitly so the final link step can resolve it.
+if (APPLE)
+	set (_luggcgl_minizip_library_dirs "")
+
+	find_package (PkgConfig QUIET)
+	if (PKG_CONFIG_FOUND)
+		pkg_check_modules (LUGGCGL_MINIZIP QUIET minizip)
+		if (LUGGCGL_MINIZIP_FOUND AND LUGGCGL_MINIZIP_LIBRARY_DIRS)
+			set (_luggcgl_minizip_library_dirs ${LUGGCGL_MINIZIP_LIBRARY_DIRS})
+		endif ()
+	endif ()
+
+	if (NOT _luggcgl_minizip_library_dirs)
+		find_library (LUGGCGL_MINIZIP_LIBRARY NAMES minizip PATHS /opt/homebrew/lib /usr/local/lib)
+		if (LUGGCGL_MINIZIP_LIBRARY)
+			get_filename_component (_luggcgl_minizip_library_dirs "${LUGGCGL_MINIZIP_LIBRARY}" DIRECTORY)
+		endif ()
+	endif ()
+
+	if (_luggcgl_minizip_library_dirs)
+		link_directories (${_luggcgl_minizip_library_dirs})
+	endif ()
+
+	unset (_luggcgl_minizip_library_dirs)
+endif ()
 
 # GLFW is used for inputs and windows handling
 set (LUGGCGL_GLFW_MIN_VERSION 3.2.0)
@@ -294,6 +341,12 @@ install (
 # 7. 资源复制
 # ------------------------------------------------------------------------------
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/shaders DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+
+# Copy downloaded resources (if any) into the runtime `res/` folder first,
+# then copy the project's tracked `res/` folder to override/extend.
+if (DEFINED resources_SOURCE_DIR AND EXISTS "${resources_SOURCE_DIR}")
+	file(COPY "${resources_SOURCE_DIR}/" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/res")
+endif ()
 file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/res DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
 
 message(STATUS "ForestScene setup done.")

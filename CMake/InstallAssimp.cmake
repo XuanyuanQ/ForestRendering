@@ -13,15 +13,44 @@ if (NOT assimp_FOUND)
 		FetchContent_Populate (assimp)
 	endif ()
 
+	set (_luggcgl_assimp_patch "${CMAKE_SOURCE_DIR}/0001-disable-assimp-werror-apple.patch")
+	if (EXISTS "${_luggcgl_assimp_patch}")
+		# Apply the patch once (git apply is idempotent via the reverse-check).
+		execute_process (
+			COMMAND ${GIT_EXECUTABLE} -C "${assimp_SOURCE_DIR}" apply --reverse --check "${_luggcgl_assimp_patch}"
+			RESULT_VARIABLE _luggcgl_assimp_patch_already_applied
+			OUTPUT_QUIET
+			ERROR_QUIET
+		)
+
+		if (NOT _luggcgl_assimp_patch_already_applied EQUAL 0)
+			message (STATUS "Patching assimp to build on AppleClang…")
+			execute_process (
+				COMMAND ${GIT_EXECUTABLE} -C "${assimp_SOURCE_DIR}" apply "${_luggcgl_assimp_patch}"
+				OUTPUT_VARIABLE stdout
+				ERROR_VARIABLE stderr
+				RESULT_VARIABLE result
+			)
+			if (result)
+				message (FATAL_ERROR "Applying assimp patch failed: ${result}\n"
+				                     "Standard output: ${stdout}\n"
+				                     "Error output: ${stderr}")
+			endif ()
+		endif ()
+	endif ()
+
 	set (assimp_INSTALL_DIR "${FETCHCONTENT_BASE_DIR}/assimp-install")
 	if (NOT EXISTS "${assimp_INSTALL_DIR}")
 		file (MAKE_DIRECTORY ${assimp_INSTALL_DIR})
 	endif ()
 
 	message (STATUS "Setting up CMake for assimp…")
+	set (_luggcgl_assimp_cmake_args -G "${CMAKE_GENERATOR}")
+	if (CMAKE_GENERATOR_PLATFORM)
+		list (APPEND _luggcgl_assimp_cmake_args -A "${CMAKE_GENERATOR_PLATFORM}")
+	endif ()
 	execute_process (
-		COMMAND ${CMAKE_COMMAND} -G "${CMAKE_GENERATOR}"
-		                         -A "${CMAKE_GENERATOR_PLATFORM}"
+		COMMAND ${CMAKE_COMMAND} ${_luggcgl_assimp_cmake_args}
 		                         -DASSIMP_NO_EXPORT=ON
 		                         -DASSIMP_BUILD_ASSIMP_TOOLS=OFF
 		                         -DASSIMP_BUILD_TESTS=OFF
@@ -54,5 +83,8 @@ if (NOT assimp_FOUND)
 
 	list (APPEND CMAKE_PREFIX_PATH ${assimp_INSTALL_DIR}/lib/cmake)
 
+	unset (_luggcgl_assimp_patch)
+	unset (_luggcgl_assimp_patch_already_applied)
+	unset (_luggcgl_assimp_cmake_args)
 	set (assimp_INSTALL_DIR)
 endif ()
