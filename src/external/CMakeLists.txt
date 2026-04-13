@@ -40,7 +40,7 @@ target_link_libraries (
 	external_libs
 	PRIVATE
 		glfw
-		$<$<NOT:$<BOOL:${WIN32}>>:dl>
+		${CMAKE_DL_LIBS}
 )
 
 install (TARGETS external_libs DESTINATION lib)

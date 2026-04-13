@@ -85,9 +85,16 @@ include (CMake/InstallGLFW.cmake)
 find_package (glfw3 ${LUGGCGL_GLFW_MIN_VERSION} REQUIRED)
 
 # GLM is used for matrices, vectors and camera handling
-set (LUGGCGL_GLM_DOWNLOAD_VERSION 0.9.9.5)
-include (CMake/InstallGLM.cmake)
-find_package (glm ${LUGGCGL_GLM_DOWNLOAD_VERSION} EXACT REQUIRED)
+if (EXISTS "${CMAKE_SOURCE_DIR}/glm-0.9.9.5/glm/glm.hpp")
+	# GLM is header-only; prefer the vendored copy to avoid platform-specific package config issues.
+	add_library(luggcgl_glm INTERFACE)
+	target_include_directories(luggcgl_glm INTERFACE "${CMAKE_SOURCE_DIR}/glm-0.9.9.5")
+	add_library(glm::glm ALIAS luggcgl_glm)
+else ()
+	set (LUGGCGL_GLM_DOWNLOAD_VERSION 0.9.9.5)
+	include (CMake/InstallGLM.cmake)
+	find_package (glm REQUIRED)
+endif ()
 
 # TinyFileDialogs is used for displaying error popups.
 include (CMake/InstallTinyFileDialogs.cmake)
@@ -251,9 +258,9 @@ if (BUILD_VULKAN)
 		CG_Labs_options
 		assignment_setup
 		glfw
-		glm
+		glm::glm
 		Vulkan::Vulkan
-		$<$<NOT:$<BOOL:${WIN32}>>:dl>
+		${CMAKE_DL_LIBS}
 	)
 
 	install (

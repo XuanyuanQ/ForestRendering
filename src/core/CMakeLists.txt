@@ -52,8 +52,8 @@ target_link_libraries (
 		${ASSIMP_LIBRARIES}
 		external_libs
 		glfw
-		glm
-		$<$<NOT:$<BOOL:${WIN32}>>:dl>
+		glm::glm
+		${CMAKE_DL_LIBS}
 	PRIVATE
 		CG_Labs_options
 		stb::stb
