@@ -179,10 +179,17 @@ endfunction ()
 add_subdirectory ("${CMAKE_SOURCE_DIR}/src/external")
 add_subdirectory ("${CMAKE_SOURCE_DIR}/src/core")
 set(MAIN_SOURCE "${CMAKE_SOURCE_DIR}/src/main.cpp")
+# set(VK_MAIN_SOURCE "${CMAKE_SOURCE_DIR}/src/main_vk.cpp")
 
 set(VK_SOURCE
 	"${CMAKE_SOURCE_DIR}/src/vk_main.cpp"
 	"${CMAKE_SOURCE_DIR}/src/vk_main.hpp"
+)
+
+# Vulkan framework skeleton (final integration architecture).
+file(GLOB_RECURSE VK_FRAMEWORK_SOURCES CONFIGURE_DEPENDS
+	"${CMAKE_SOURCE_DIR}/src/vk/*.cpp"
+	"${CMAKE_SOURCE_DIR}/src/vk/*.hpp"
 )
 
 set(SCENE_SOURCE 
@@ -217,6 +224,7 @@ if (BUILD_VULKAN)
 	add_executable(ForestSceneVk
 		${MAIN_SOURCE}
 		${VK_SOURCE}
+		${VK_FRAMEWORK_SOURCES}
 	)
 
 	target_compile_definitions(ForestSceneVk
