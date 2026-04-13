@@ -9,6 +9,30 @@ if (WIN32)
 	set (ENV{TMP} ${LUGGCGL_TMP_DIR})
 endif ()
 
+
+# Rendering backend build switch.
+# OPENGL: build only OpenGL executable
+# VULKAN: build only Vulkan executable
+# BOTH:   build both executables
+set (RENDER_BACKEND "BOTH" CACHE STRING "Rendering backend to build: OPENGL, VULKAN, BOTH")
+set_property (CACHE RENDER_BACKEND PROPERTY STRINGS OPENGL VULKAN BOTH)
+
+string (TOUPPER "${RENDER_BACKEND}" RENDER_BACKEND)
+if (NOT RENDER_BACKEND STREQUAL "OPENGL" AND NOT RENDER_BACKEND STREQUAL "VULKAN" AND NOT RENDER_BACKEND STREQUAL "BOTH")
+	message (FATAL_ERROR "Invalid RENDER_BACKEND='${RENDER_BACKEND}'. Expected OPENGL, VULKAN, or BOTH.")
+endif ()
+
+set (BUILD_OPENGL OFF)
+set (BUILD_VULKAN OFF)
+if (RENDER_BACKEND STREQUAL "OPENGL")
+	set (BUILD_OPENGL ON)
+elseif (RENDER_BACKEND STREQUAL "VULKAN")
+	set (BUILD_VULKAN ON)
+else ()
+	set (BUILD_OPENGL ON)
+	set (BUILD_VULKAN ON)
+endif ()
+
 # Set project attributes.
 project (
 	CG_Labs
@@ -32,6 +56,11 @@ if (NOT CMAKE_BUILD_TYPE)
 endif (NOT CMAKE_BUILD_TYPE)
 set_property (CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS ${CMAKE_CONFIGURATION_TYPES})
 
+
+if (BUILD_VULKAN)
+	find_package(Vulkan REQUIRED)
+	find_package(glfw3 CONFIG REQUIRED)
+endif ()
 
 # To be able to dowload and compile the dependencies
 find_package (Git REQUIRED)
@@ -149,27 +178,93 @@ endfunction ()
 
 add_subdirectory ("${CMAKE_SOURCE_DIR}/src/external")
 add_subdirectory ("${CMAKE_SOURCE_DIR}/src/core")
-# add_subdirectory ("${CMAKE_SOURCE_DIR}/src/EDAF80")
-# add_subdirectory ("${CMAKE_SOURCE_DIR}/src/EDAN35")
 set(MAIN_SOURCE "${CMAKE_SOURCE_DIR}/src/main.cpp")
+
+set(VK_SOURCE
+	"${CMAKE_SOURCE_DIR}/src/vk_main.cpp"
+	"${CMAKE_SOURCE_DIR}/src/vk_main.hpp"
+)
 
 set(SCENE_SOURCE 
     "${CMAKE_SOURCE_DIR}/src/ForestScene.cpp" 
     "${CMAKE_SOURCE_DIR}/src/ForestScene.hpp"
 )
 
-add_executable(ForestScene 
-    ${MAIN_SOURCE}
-    ${SCENE_SOURCE} 
-)
+if (BUILD_OPENGL)
+	add_executable(ForestScene
+		${MAIN_SOURCE}
+		${SCENE_SOURCE}
+	)
 
-target_link_libraries(ForestScene
-    PRIVATE
-    assignment_setup
-    # glfw
-    # glm              # 现在这个名字有效了，因为我们在上面定义了 add_library(glm)
-    # assimp::assimp   # 使用更安全的命名空间链接
-)
+	target_compile_definitions(ForestScene
+		PRIVATE
+		BUILD_VULKAN=0
+	)
+
+	target_link_libraries(ForestScene
+		PRIVATE
+		assignment_setup
+	)
+
+	copy_dlls (ForestScene "${CMAKE_CURRENT_BINARY_DIR}")
+	install (
+		TARGETS ForestScene
+		DESTINATION ${CMAKE_SOURCE_DIR}/src/bin
+	)
+endif ()
+
+if (BUILD_VULKAN)
+	add_executable(ForestSceneVk
+		${MAIN_SOURCE}
+		${VK_SOURCE}
+	)
+
+	target_compile_definitions(ForestSceneVk
+		PRIVATE
+		BUILD_VULKAN=1
+	)
+
+	target_include_directories(ForestSceneVk
+		PRIVATE
+		"${CMAKE_SOURCE_DIR}/src"
+	)
+	target_compile_features(ForestSceneVk PRIVATE cxx_std_20)
+
+
+	add_definitions(-DNOMINMAX)
+		# 5. 添加必要的宏定义（针对 Vulkan-Hpp）
+	target_compile_definitions(ForestSceneVk PRIVATE 
+			VULKAN_HPP_DISPATCH_LOADER_DYNAMIC=1
+			VULKAN_HPP_NO_STRUCT_CONSTRUCTORS=1
+		)
+
+	target_link_libraries(ForestSceneVk
+		PRIVATE
+		CG_Labs_options
+		assignment_setup
+		glfw
+		glm
+		Vulkan::Vulkan
+		$<$<NOT:$<BOOL:${WIN32}>>:dl>
+	)
+
+	install (
+		TARGETS ForestSceneVk
+		DESTINATION ${CMAKE_SOURCE_DIR}/src/bin
+	)
+endif ()
+# add_executable(ForestScene 
+#     ${MAIN_SOURCE}
+#     ${SCENE_SOURCE} 
+# )
+
+# target_link_libraries(ForestScene
+#     PRIVATE
+#     assignment_setup
+#     # glfw
+#     # glm              # 现在这个名字有效了，因为我们在上面定义了 add_library(glm)
+#     # assimp::assimp   # 使用更安全的命名空间链接
+# )
 
 copy_dlls (ForestScene "${CMAKE_CURRENT_BINARY_DIR}")
 message(${CMAKE_CURRENT_BINARY_DIR})
