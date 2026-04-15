@@ -5,6 +5,7 @@
 
 #include "vk/renderer/FrameContext.hpp"
 #include "vk/renderer/RenderTargets.hpp"
+#include "vk/renderer/FrameGlobals.hpp"
 
 namespace vkfw {
 
@@ -28,7 +29,7 @@ public:
   void OnSwapchainRecreated(VkContext& ctx, VkSwapchain& swapchain, VkFrameSync& sync);
 
   // Returns false when swapchain needs recreation.
-  bool DrawFrame(VkContext& ctx, VkSwapchain& swapchain, VkFrameSync& sync,bool val);
+  bool DrawFrame(VkContext& ctx, VkSwapchain& swapchain, VkFrameSync& sync, bool val,FrameGlobals const& globals);
 
   RenderTargets& Targets() noexcept { return targets_; }
   RenderTargets const& Targets() const noexcept { return targets_; }
@@ -36,6 +37,7 @@ public:
 private:
   void CreateCommandResources(VkContext& ctx, VkFrameSync& sync);
   void DestroyCommandResources(VkContext& ctx);
+
 
   std::vector<std::unique_ptr<IRenderPass>> passes_;
   RenderTargets targets_{};

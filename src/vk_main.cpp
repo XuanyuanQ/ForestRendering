@@ -19,10 +19,51 @@
 #include <cstdlib>
 #include <memory>
 #include <stdexcept>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <chrono>
+
+#include "vk/features/mesh/MeshPass.hpp"
+
 namespace {
 constexpr uint32_t kWidth = 800;
 constexpr uint32_t kHeight = 600;
 constexpr uint32_t kFramesInFlight = 2;
+
+struct SimpleCamera {
+  glm::vec3 pos{0.0f, 10.0f, 50.0f};
+  float yaw = -90.0f;
+  float pitch = -10.0f;
+  float move_speed = 20.0f;
+  float mouse_sens = 0.12f;
+
+  glm::vec3 Front() const {
+    float const yaw_r = glm::radians(yaw);
+    float const pitch_r = glm::radians(pitch);
+    glm::vec3 f{};
+    f.x = std::cos(yaw_r) * std::cos(pitch_r);
+    f.y = std::sin(pitch_r);
+    f.z = std::sin(yaw_r) * std::cos(pitch_r);
+    return glm::normalize(f);
+  }
+
+  glm::mat4 View() const {
+    return glm::lookAt(pos, pos + Front(), glm::vec3{0.0f, 1.0f, 0.0f});
+  }
+
+  glm::mat4 Proj(float aspect) const {
+    glm::mat4 p = glm::perspectiveRH_ZO(glm::radians(60.0f), aspect, 0.1f, 200.0f);
+    p[1][1] *= -1.0f; // Vulkan 需要翻转 Y
+    return p;
+  }
+
+  void AddMouseDelta(float dx, float dy) {
+    yaw += dx * mouse_sens;
+    pitch -= dy * mouse_sens;
+    pitch = glm::clamp(pitch, -89.0f, 89.0f);
+  }
+};
+
 
 static void FramebufferResizeCallback(GLFWwindow* window, int, int)
 {
@@ -74,12 +115,12 @@ private:
   {
     vkfw::ContextCreateInfo ci{};
     ci.window = window_;
-#ifdef NDEBUG
-    ci.enable_validation = false;
-#else
-    ci.enable_validation = true;
-#endif
-    ctx_.Init(ci);
+    #ifdef NDEBUG
+        ci.enable_validation = false;
+    #else
+        ci.enable_validation = true;
+    #endif
+        ctx_.Init(ci);
 
     sync_.Init(ctx_, kFramesInFlight);
 
@@ -91,11 +132,15 @@ private:
     
 
     // Shadow -> GBuffer -> Post -> Lighting -> UI
-    renderer_.AddPass(std::make_unique<vkfw::ShadowPass>());
-    renderer_.AddPass(std::make_unique<vkfw::GBufferPass>());
-    renderer_.AddPass(std::make_unique<vkfw::PostProcessPass>());
-    renderer_.AddPass(std::make_unique<vkfw::LightingPass>()); // draws the triangle for now
+    std::string modelPath = "res/47-mapletree/MapleTree.obj";
+    renderer_.AddPass(std::make_unique<vkfw::MeshPass>(modelPath));
+    // renderer_.AddPass(std::make_unique<vkfw::ShadowPass>());
+    // renderer_.AddPass(std::make_unique<vkfw::GBufferPass>());
+    // renderer_.AddPass(std::make_unique<vkfw::PostProcessPass>());
+    // renderer_.AddPass(std::make_unique<vkfw::LightingPass>()); // draws the triangle for now
     renderer_.AddPass(std::make_unique<vkfw::ImGuiPass>());
+
+
 
     if (!renderer_.Create(ctx_, swapchain_, sync_))
       throw std::runtime_error("vkfw::VkRenderer::Create failed");
@@ -118,6 +163,14 @@ private:
 
   void MainLoop()
   {
+    using clock = std::chrono::high_resolution_clock;
+    auto start_time = clock::now();
+    auto last_time = start_time;
+
+    SimpleCamera camera{};
+    bool mouse_look = false;
+    double last_x = 0.0, last_y = 0.0;
+
     while (!glfwWindowShouldClose(window_)) {
       glfwPollEvents();
         // 2. 启动 ImGui 帧
@@ -145,14 +198,50 @@ private:
           ImGui::Render();
       }
 
-      if (framebuffer_resized_)
-        RecreateSwapchain();
+      auto now = clock::now();
+      float dt = std::chrono::duration<float>(now - last_time).count();
+      float t  = std::chrono::duration<float>(now - start_time).count();
+      last_time = now;
+      if (glfwGetKey(window_, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+        glfwSetWindowShouldClose(window_, GLFW_TRUE);
 
-      if (!renderer_.DrawFrame(ctx_, swapchain_, sync_,_isStart))
+      // RMB mouse look
+      if (glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
+        if (!mouse_look) {
+          mouse_look = true;
+          glfwSetInputMode(window_, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+          glfwGetCursorPos(window_, &last_x, &last_y);
+        }
+        double x, y;
+        glfwGetCursorPos(window_, &x, &y);
+        camera.AddMouseDelta(static_cast<float>(x - last_x), static_cast<float>(y - last_y));
+        last_x = x; last_y = y;
+      } else if (mouse_look) {
+        mouse_look = false;
+        glfwSetInputMode(window_, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+      }
+
+      glm::vec3 f = camera.Front();
+      glm::vec3 r = glm::normalize(glm::cross(f, glm::vec3{0.0f, 1.0f, 0.0f}));
+      float speed = camera.move_speed * dt;
+
+      if (glfwGetKey(window_, GLFW_KEY_W) == GLFW_PRESS) camera.pos += f * speed;
+      if (glfwGetKey(window_, GLFW_KEY_S) == GLFW_PRESS) camera.pos -= f * speed;
+      if (glfwGetKey(window_, GLFW_KEY_D) == GLFW_PRESS) camera.pos += r * speed;
+      if (glfwGetKey(window_, GLFW_KEY_A) == GLFW_PRESS) camera.pos -= r * speed;
+      if (glfwGetKey(window_, GLFW_KEY_E) == GLFW_PRESS) camera.pos += glm::vec3{0,1,0} * speed;
+      if (glfwGetKey(window_, GLFW_KEY_Q) == GLFW_PRESS) camera.pos -= glm::vec3{0,1,0} * speed;
+
+      vkfw::FrameGlobals globals{};
+      globals.view = camera.View();
+      globals.proj = camera.Proj(float(swapchain_.Extent().width) / float(swapchain_.Extent().height));
+      globals.camera_pos = camera.pos;
+      globals.time_seconds = t;
+      globals.delta_seconds = dt;
+
+      if (!renderer_.DrawFrame(ctx_, swapchain_, sync_, _isStart, globals))
         RecreateSwapchain();
     }
-
-    ctx_.Device().waitIdle();
   }
 
   void Cleanup()

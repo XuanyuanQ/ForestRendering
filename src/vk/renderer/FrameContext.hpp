@@ -10,6 +10,7 @@ import vulkan_hpp;
 
 namespace vkfw {
 
+struct FrameGlobals; 
 struct FrameContext {
   vk::raii::CommandBuffer* cmd = nullptr; // non-owning
   uint32_t frame_index = 0;
@@ -19,6 +20,7 @@ struct FrameContext {
   vk::Image swapchain_image{};
   vk::ImageView swapchain_image_view{};
   vk::ImageLayout swapchain_old_layout{vk::ImageLayout::ePresentSrcKHR};
+  FrameGlobals const* globals = nullptr; // non-owning
 };
 
 } // namespace vkfw

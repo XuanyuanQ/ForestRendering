@@ -66,7 +66,7 @@ void VkRenderer::OnSwapchainRecreated(VkContext& ctx, VkSwapchain& swapchain, Vk
   }
 }
 
-bool VkRenderer::DrawFrame(VkContext& ctx, VkSwapchain& swapchain, VkFrameSync& sync,bool val)
+bool VkRenderer::DrawFrame(VkContext& ctx, VkSwapchain& swapchain, VkFrameSync& sync,bool val, FrameGlobals const& globals)
 {
   sync.WaitForFrame(ctx, frame_index_);
 
@@ -94,7 +94,7 @@ bool VkRenderer::DrawFrame(VkContext& ctx, VkSwapchain& swapchain, VkFrameSync& 
   frame.swapchain_image_view = swapchain.ImageView(image_index);
   frame.swapchain_old_layout =
       swapchain.IsFirstUse(image_index) ? vk::ImageLayout::eUndefined : vk::ImageLayout::ePresentSrcKHR;
-
+   frame.globals = &globals;
   for (auto& pass : passes_) {
     pass->setDebugParameter(val);
     pass->Record(frame, targets_);
