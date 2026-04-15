@@ -275,11 +275,38 @@ if (BUILD_OPENGL)
 endif ()
 
 if (BUILD_VULKAN)
+	find_program(GLSLC_EXECUTABLE NAMES glslc HINTS ENV PATH)
+	if (NOT GLSLC_EXECUTABLE)
+	message(FATAL_ERROR "glslc not found")
+	endif()
+
+	set(VK_SHADER_SOURCES
+	"${CMAKE_SOURCE_DIR}/shaders/vk/mesh.vert"
+	"${CMAKE_SOURCE_DIR}/shaders/vk/mesh.frag"
+	)
+
+	set(VK_SHADER_SPV_OUTPUTS "")
+	foreach(shader_src IN LISTS VK_SHADER_SOURCES)
+	get_filename_component(shader_name "${shader_src}" NAME)
+	set(shader_out "${CMAKE_CURRENT_BINARY_DIR}/res/vk/${shader_name}.spv")
+	add_custom_command(
+		OUTPUT "${shader_out}"
+		COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/res/vk"
+		COMMAND "${GLSLC_EXECUTABLE}" -o "${shader_out}" "${shader_src}"
+		DEPENDS "${shader_src}"
+		VERBATIM
+	)
+	list(APPEND VK_SHADER_SPV_OUTPUTS "${shader_out}")
+	endforeach()
+
+	add_custom_target(vk_shaders DEPENDS ${VK_SHADER_SPV_OUTPUTS})
+
 	add_executable(ForestSceneVk
 		${MAIN_SOURCE}
 		${VK_SOURCE}
 		${VK_FRAMEWORK_SOURCES}
 	)
+	add_dependencies(ForestSceneVk vk_shaders)
 
 	target_compile_definitions(ForestSceneVk
 		PRIVATE
