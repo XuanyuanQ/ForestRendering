@@ -196,7 +196,7 @@ bool VkContext::Init(ContextCreateInfo const& info)
   if (impl_->graphics_queue_family_index == ~0u)
     throw std::runtime_error("No graphics+present queue family found");
 
-  // Device.
+  // logical Device.
   float priority = 1.0f;
   vk::DeviceQueueCreateInfo qci{};
   qci.queueFamilyIndex = impl_->graphics_queue_family_index;
@@ -222,8 +222,10 @@ bool VkContext::Init(ContextCreateInfo const& info)
   impl_->graphics_queue = vk::raii::Queue{impl_->device, impl_->graphics_queue_family_index, 0};
 
   impl_->initialized = true;
+  
   return true;
 }
+
 
 void VkContext::Shutdown()
 {

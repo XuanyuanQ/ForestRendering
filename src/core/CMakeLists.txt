@@ -41,10 +41,6 @@ target_include_directories (
 		"${ASSIMP_INCLUDE_DIRS}"
 		"${CMAKE_SOURCE_DIR}/src/external"
 )
-message("xxxxxxxxxxxyyyyyyyyyy:${CMAKE_SOURCE_DIR}/src/external")
-message("xxxxxxxxxxxyyyyyyyyyy:${CMAKE_SOURCE_DIR}")
-message("xxxxxxxxxxxyyyyyyyyyy:${CMAKE_BINARY_DIR}")
-message("xxxxxxxxxxxyyyyyyyyyy:${ASSIMP_INCLUDE_DIRS}")
 
 target_link_libraries (
 	bonobo

@@ -57,10 +57,10 @@ endif (NOT CMAKE_BUILD_TYPE)
 set_property (CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS ${CMAKE_CONFIGURATION_TYPES})
 
 
-if (BUILD_VULKAN)
+# if (BUILD_VULKAN)
 	find_package(Vulkan REQUIRED)
-	find_package(glfw3 CONFIG REQUIRED)
-endif ()
+	# find_package(glfw3 CONFIG REQUIRED)
+# endif ()
 
 # To be able to dowload and compile the dependencies
 find_package (Git REQUIRED)
@@ -305,9 +305,10 @@ if (BUILD_VULKAN)
 		CG_Labs_options
 		assignment_setup
 		glfw
-		glm::glm
 		Vulkan::Vulkan
+		
 		${CMAKE_DL_LIBS}
+		
 	)
 
 	install (
@@ -315,18 +316,6 @@ if (BUILD_VULKAN)
 		DESTINATION ${CMAKE_SOURCE_DIR}/src/bin
 	)
 endif ()
-# add_executable(ForestScene 
-#     ${MAIN_SOURCE}
-#     ${SCENE_SOURCE} 
-# )
-
-# target_link_libraries(ForestScene
-#     PRIVATE
-#     assignment_setup
-#     # glfw
-#     # glm              # 现在这个名字有效了，因为我们在上面定义了 add_library(glm)
-#     # assimp::assimp   # 使用更安全的命名空间链接
-# )
 
 copy_dlls (ForestScene "${CMAKE_CURRENT_BINARY_DIR}")
 message(${CMAKE_CURRENT_BINARY_DIR})

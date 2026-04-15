@@ -15,6 +15,10 @@ public:
   virtual void Destroy(VkContext& ctx) = 0;
   virtual void OnSwapchainRecreated(VkContext& ctx, VkSwapchain const& swapchain, RenderTargets& targets) = 0;
   virtual void Record(FrameContext& frame, RenderTargets& targets) = 0;
+
+  virtual void setDebugParameter(bool val){
+    
+  };
 };
 
 } // namespace vkfw

@@ -4,7 +4,8 @@
 #include "vk/core/VkSwapchain.hpp"
 #include "vk/renderer/FrameContext.hpp"
 #include "vk/renderer/RenderTargets.hpp"
-
+#include <imgui.h>
+#include <imgui_impl_vulkan.h>
 #include <array>
 #include <cassert>
 #include <chrono>
@@ -17,10 +18,7 @@
 namespace vkfw {
 namespace {
 
-struct Vertex {
-  float pos[2];
-  float color[3];
-};
+
 
 static vk::VertexInputBindingDescription BindingDesc()
 {
@@ -182,7 +180,7 @@ bool LightingPass::Create(VkContext& ctx, VkSwapchain const& swapchain, RenderTa
   pipeline_ = vk::raii::Pipeline{device, nullptr, gp_ci};
 
   // Geometry: a single triangle.
-  std::array<Vertex, 3> const vertices = {{
+  vertices_ = {{
       {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
       {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
       {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
@@ -193,7 +191,7 @@ bool LightingPass::Create(VkContext& ctx, VkSwapchain const& swapchain, RenderTa
 
   {
     vk::BufferCreateInfo bci{};
-    bci.size = sizeof(vertices);
+    bci.size = sizeof(vertices_);
     bci.usage = vk::BufferUsageFlagBits::eVertexBuffer;
     bci.sharingMode = vk::SharingMode::eExclusive;
     vertex_buffer_ = vk::raii::Buffer{device, bci};
@@ -207,7 +205,7 @@ bool LightingPass::Create(VkContext& ctx, VkSwapchain const& swapchain, RenderTa
     vertex_buffer_.bindMemory(*vertex_memory_, 0);
 
     void* dst = vertex_memory_.mapMemory(0, bci.size);
-    std::memcpy(dst, vertices.data(), sizeof(vertices));
+    std::memcpy(dst, vertices_.data(), sizeof(vertices_));
     vertex_memory_.unmapMemory();
   }
 
@@ -252,6 +250,10 @@ void LightingPass::OnSwapchainRecreated(VkContext&, VkSwapchain const&, RenderTa
 
 void LightingPass::Record(FrameContext& frame, RenderTargets&)
 {
+  if(debugParameter_){
+    updateVertexBuffer();
+  }
+  
   if (frame.cmd == nullptr)
     return;
 
@@ -296,6 +298,8 @@ void LightingPass::Record(FrameContext& frame, RenderTargets&)
   cmd.pushConstants<float>(*pipeline_layout_, vk::ShaderStageFlagBits::eFragment, 0, t);
   cmd.drawIndexed(3, 1, 0, 0, 0);
 
+  ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), *cmd);
+
   cmd.endRendering();
 
   // Transition to present.
@@ -308,5 +312,27 @@ void LightingPass::Record(FrameContext& frame, RenderTargets&)
                   vk::PipelineStageFlagBits2::eColorAttachmentOutput,
                   vk::PipelineStageFlagBits2::eBottomOfPipe);
 }
+
+void LightingPass::setDebugParameter(bool val){
+  debugParameter_=val;
+}
+
+	void LightingPass::updateVertexBuffer()
+	{
+		static float dir = 1.0f;
+
+		vertices_[0].pos[0] += 0.01f * dir;
+
+		if (vertices_[0].pos[0] >= 1.0f) {
+			vertices_[0].pos[0] = 1.0f;
+			dir = -1.0f;
+		} else if (vertices_[0].pos[0] <= -1.0f) {
+			vertices_[0].pos[0] = -1.0f;
+			dir = 1.0f;
+		}
+		void* data = vertex_memory_.mapMemory(0, sizeof(vertices_[0]) * vertices_.size());
+		memcpy(data, vertices_.data(), sizeof(vertices_[0]) * vertices_.size());
+		vertex_memory_.unmapMemory();
+	}
 
 } // namespace vkfw

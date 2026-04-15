@@ -28,7 +28,7 @@ public:
   void OnSwapchainRecreated(VkContext& ctx, VkSwapchain& swapchain, VkFrameSync& sync);
 
   // Returns false when swapchain needs recreation.
-  bool DrawFrame(VkContext& ctx, VkSwapchain& swapchain, VkFrameSync& sync);
+  bool DrawFrame(VkContext& ctx, VkSwapchain& swapchain, VkFrameSync& sync,bool val);
 
   RenderTargets& Targets() noexcept { return targets_; }
   RenderTargets const& Targets() const noexcept { return targets_; }
