@@ -41,10 +41,6 @@ target_include_directories (
 		"${ASSIMP_INCLUDE_DIRS}"
 		"${CMAKE_SOURCE_DIR}/src/external"
 )
-message("xxxxxxxxxxxyyyyyyyyyy:${CMAKE_SOURCE_DIR}/src/external")
-message("xxxxxxxxxxxyyyyyyyyyy:${CMAKE_SOURCE_DIR}")
-message("xxxxxxxxxxxyyyyyyyyyy:${CMAKE_BINARY_DIR}")
-message("xxxxxxxxxxxyyyyyyyyyy:${ASSIMP_INCLUDE_DIRS}")
 
 target_link_libraries (
 	bonobo
@@ -52,8 +48,8 @@ target_link_libraries (
 		${ASSIMP_LIBRARIES}
 		external_libs
 		glfw
-		glm
-		$<$<NOT:$<BOOL:${WIN32}>>:dl>
+		glm::glm
+		${CMAKE_DL_LIBS}
 	PRIVATE
 		CG_Labs_options
 		stb::stb
