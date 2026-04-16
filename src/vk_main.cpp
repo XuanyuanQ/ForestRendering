@@ -92,8 +92,7 @@ private:
   vkfw::VkSwapchain swapchain_{};
   vkfw::VkFrameSync sync_{};
   vkfw::VkRenderer renderer_{};
-  vkfw::ImGuiResources imu_resources_;
-  bool _isStart = false;
+  vkfw::DebugParam debugParameter_;
 
   void InitWindow()
   {
@@ -139,12 +138,8 @@ private:
     // renderer_.AddPass(std::make_unique<vkfw::PostProcessPass>());
     // renderer_.AddPass(std::make_unique<vkfw::LightingPass>()); // draws the triangle for now
     renderer_.AddPass(std::make_unique<vkfw::ImGuiPass>());
-
-
-
-    if (!renderer_.Create(ctx_, swapchain_, sync_))
+    if (!renderer_.Create(ctx_, swapchain_, sync_,debugParameter_))
       throw std::runtime_error("vkfw::VkRenderer::Create failed");
-    InitImGuiDynamic();
   }
 
   void RecreateSwapchain()
@@ -173,30 +168,6 @@ private:
 
     while (!glfwWindowShouldClose(window_)) {
       glfwPollEvents();
-        // 2. 启动 ImGui 帧
-      ImGui_ImplVulkan_NewFrame();
-      ImGui_ImplGlfw_NewFrame();
-      ImGui::NewFrame();
-
-      // 3. 定义 UI 界面逻辑 (这就是你创建按钮的地方)
-      {
-          ImGui::Begin("debug interface"); // 创建一个窗口
-          
-          ImGui::Text("number of trees: 1024");
-          
-          // // 创建按钮：Button 返回 true 代表本帧被点击了
-          // if (ImGui::Button("生成新随机森林")) {
-          //     // 这里写点击按钮后要执行的逻辑
-          //     std::cout << "正在重新种植森林..." << std::endl;
-          // }
-
-          static float treeScale = 1.0f;
-          
-          ImGui::SliderFloat("scale", &treeScale, 0.1f, 5.0f);
-          ImGui::Checkbox("rotation", &_isStart);
-          ImGui::End();
-          ImGui::Render();
-      }
 
       auto now = clock::now();
       float dt = std::chrono::duration<float>(now - last_time).count();
@@ -239,7 +210,7 @@ private:
       globals.time_seconds = t;
       globals.delta_seconds = dt;
 
-      if (!renderer_.DrawFrame(ctx_, swapchain_, sync_, _isStart, globals))
+      if (!renderer_.DrawFrame(ctx_, swapchain_, sync_, globals))
         RecreateSwapchain();
     }
   }
@@ -247,9 +218,6 @@ private:
   void Cleanup()
   {
     ctx_.Device().waitIdle();
-    ImGui_ImplVulkan_Shutdown();
-    ImGui_ImplGlfw_Shutdown();
-    ImGui::DestroyContext();
 
     if (ctx_.IsInitialized()) {
       renderer_.Destroy(ctx_);
@@ -265,112 +233,7 @@ private:
 
     glfwTerminate();
   }
-const static VkFormat color_format = VK_FORMAT_B8G8R8A8_UNORM;
-void InitImGuiDynamic() 
-{
-    // --- 1. 数据准备 ---
-    std::cout<<"start"<<std::endl;
-    auto window              = ctx_.Window();
-    const auto& instance     = ctx_.Instance(); 
-    const auto& device       = ctx_.Device();
-    const auto& physicalDevice = ctx_.PhysicalDevice();
-    const auto& graphicsQueue  = ctx_.GraphicsQueue();
-    auto queueFamilyIndex    = ctx_.GraphicsQueueFamilyIndex();
-    
-    vk::Format swapChainFormat = swapchain_.SurfaceFormat().format; 
-    vk::Format depthFormat     = vk::Format::eD32Sfloat;
-    uint32_t imageCount        = swapchain_.ImageCount();
 
-    // --- 2. 创建 RAII 描述符池 ---
-    // ImGui 后端会分配多种类型的 descriptor，并且对 image sampler 数量有下限断言（见 IMGUI_IMPL_VULKAN_MINIMUM_IMAGE_SAMPLER_POOL_SIZE）。
-    // 这里直接给一个足够大的通用池，避免初始化阶段 IM_ASSERT 直接 abort。
-    std::array<vk::DescriptorPoolSize, 11> poolSizes = {
-        vk::DescriptorPoolSize{vk::DescriptorType::eSampler, 1000},
-        vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 1000},
-        vk::DescriptorPoolSize{vk::DescriptorType::eSampledImage, 1000},
-        vk::DescriptorPoolSize{vk::DescriptorType::eStorageImage, 1000},
-        vk::DescriptorPoolSize{vk::DescriptorType::eUniformTexelBuffer, 1000},
-        vk::DescriptorPoolSize{vk::DescriptorType::eStorageTexelBuffer, 1000},
-        vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, 1000},
-        vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer, 1000},
-        vk::DescriptorPoolSize{vk::DescriptorType::eUniformBufferDynamic, 1000},
-        vk::DescriptorPoolSize{vk::DescriptorType::eStorageBufferDynamic, 1000},
-        vk::DescriptorPoolSize{vk::DescriptorType::eInputAttachment, 1000},
-    };
-
-    vk::DescriptorPoolCreateInfo poolInfo = vk::DescriptorPoolCreateInfo()
-        .setFlags(vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet)
-        .setMaxSets(1000 * static_cast<uint32_t>(poolSizes.size()))
-        .setPoolSizeCount(static_cast<uint32_t>(poolSizes.size()))
-        .setPPoolSizes(poolSizes.data());
-
-    imu_resources_.descriptorPool = vk::raii::DescriptorPool(device, poolInfo);
-
-    // --- 3. ImGui 核心上下文设置 ---
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGui::StyleColorsDark();
-
-    // --- 4. 初始化 GLFW 后端 ---
-    ImGui_ImplGlfw_InitForVulkan(window, true);
-
-    // --- 5. 初始化 Vulkan 后端 (动态渲染模式) ---
-    
- ImGui_ImplVulkan_InitInfo initInfo = {};
- // 1. 强制清零整个结构体，防止任何隐藏字段（如 ApiVersion）是随机值
- memset(&initInfo, 0, sizeof(initInfo)); 
-
-  // 0. 如果工程启用了 IMGUI_IMPL_VULKAN_NO_PROTOTYPES/VK_NO_PROTOTYPES，必须先加载函数指针，否则后端会 IM_ASSERT 直接终止。
-  // external/CMakeLists.txt 里对 external_libs 设置了 IMGUI_IMPL_VULKAN_NO_PROTOTYPES（PUBLIC），所以这里必需。
-  auto loader = [](const char* function_name, void* user_data) -> PFN_vkVoidFunction {
-    VkInstance instance = reinterpret_cast<VkInstance>(user_data);
-    if (auto fn = ::vkGetInstanceProcAddr(instance, function_name))
-      return fn;
-    return ::vkGetInstanceProcAddr(VK_NULL_HANDLE, function_name);
-  };
-  if (!ImGui_ImplVulkan_LoadFunctions(VK_API_VERSION_1_3, loader, (void*)(VkInstance)*ctx_.Instance())) {
-    throw std::runtime_error("ImGui_ImplVulkan_LoadFunctions failed");
-  }
-
-  // 2. 基础信息
-  initInfo.ApiVersion     = VK_API_VERSION_1_3;
-  initInfo.Instance       = *ctx_.Instance();
-  initInfo.PhysicalDevice = *ctx_.PhysicalDevice();
-  initInfo.Device         = *ctx_.Device();
-  initInfo.QueueFamily    = queueFamilyIndex;
-  initInfo.Queue          = *graphicsQueue;
-  initInfo.DescriptorPool = *imu_resources_.descriptorPool;
-  initInfo.MinImageCount  = 2;
-  initInfo.ImageCount     = imageCount;
-
-  // 3. 动态渲染配置
-  initInfo.UseDynamicRendering = true;
-  initInfo.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-
-  // 重点：手动设置 sType 
-  initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
-  initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
-  static VkFormat format = VK_FORMAT_B8G8R8A8_UNORM; // 确保格式与交换链一致
-  initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = &format;
-  initInfo.CheckVkResultFn = [](VkResult err) {
-    if (err != VK_SUCCESS)
-      std::cerr << "[ImGui] Vulkan Error: " << static_cast<int>(err) << std::endl;
-  };
-  if (nullptr==imu_resources_.descriptorPool) {
-    throw std::runtime_error("描述符池创建失败！");
-  }
-// 使用 static_cast 转换为底层句柄类型，再转为 void* 方便 cout 识别
-std::cout << "[DEBUG] Instance: "       << (void*)(VkInstance)*ctx_.Instance() << std::endl;
-std::cout << "[DEBUG] PhysicalDevice: " << (void*)(VkPhysicalDevice)*ctx_.PhysicalDevice() << std::endl;
-std::cout << "[DEBUG] Device: "         << (void*)(VkDevice)*ctx_.Device() << std::endl;
-std::cout << "[DEBUG] Size of InitInfo: " << (uint32_t)sizeof(ImGui_ImplVulkan_InitInfo) << std::endl;
-// 结构体内部的已经是原始类型了，直接转 void*
-std::cout << "[DEBUG] initInfo PD: "    << (void*)initInfo.PhysicalDevice << std::endl;
-    ImGui_ImplVulkan_Init(&initInfo);
-  std::cout<<"end"<<std::endl;
-    // --- 6. 创建字体 ---
-    // ImGui_ImplVulkan_CreateFontsTexture();
-}
 };
 
 VkMainApp::VkMainApp() : impl_(new Impl()) {}

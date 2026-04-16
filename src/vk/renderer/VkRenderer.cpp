@@ -38,7 +38,7 @@ void VkRenderer::DestroyCommandResources(VkContext& ctx)
   command_pool_ = nullptr;
 }
 
-bool VkRenderer::Create(VkContext& ctx, VkSwapchain& swapchain, VkFrameSync& sync)
+bool VkRenderer::Create(VkContext& ctx, VkSwapchain& swapchain, VkFrameSync& sync,DebugParam& param)
 {
   sync.EnsureRenderFinishedSize(ctx, swapchain.ImageCount());
   CreateCommandResources(ctx, sync);
@@ -46,6 +46,7 @@ bool VkRenderer::Create(VkContext& ctx, VkSwapchain& swapchain, VkFrameSync& syn
   for (auto& pass : passes_) {
     if (!pass->Create(ctx, swapchain, targets_))
       return false;
+    pass->setDebugParameter(param);
   }
   return true;
 }
@@ -66,7 +67,7 @@ void VkRenderer::OnSwapchainRecreated(VkContext& ctx, VkSwapchain& swapchain, Vk
   }
 }
 
-bool VkRenderer::DrawFrame(VkContext& ctx, VkSwapchain& swapchain, VkFrameSync& sync,bool val, FrameGlobals const& globals)
+bool VkRenderer::DrawFrame(VkContext& ctx, VkSwapchain& swapchain, VkFrameSync& sync, FrameGlobals const& globals)
 {
   sync.WaitForFrame(ctx, frame_index_);
 
@@ -96,7 +97,6 @@ bool VkRenderer::DrawFrame(VkContext& ctx, VkSwapchain& swapchain, VkFrameSync& 
       swapchain.IsFirstUse(image_index) ? vk::ImageLayout::eUndefined : vk::ImageLayout::ePresentSrcKHR;
    frame.globals = &globals;
   for (auto& pass : passes_) {
-    pass->setDebugParameter(val);
     pass->Record(frame, targets_);
   }
 

@@ -1,5 +1,5 @@
 #pragma once
-
+#include "vk/scene/common.hpp"
 namespace vkfw {
 
 class VkContext;
@@ -16,7 +16,7 @@ public:
   virtual void OnSwapchainRecreated(VkContext& ctx, VkSwapchain const& swapchain, RenderTargets& targets) = 0;
   virtual void Record(FrameContext& frame, RenderTargets& targets) = 0;
 
-  virtual void setDebugParameter(bool val){
+  virtual void setDebugParameter(DebugParam& param){
     
   };
 };

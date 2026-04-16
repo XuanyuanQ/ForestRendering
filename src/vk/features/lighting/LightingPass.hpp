@@ -19,7 +19,7 @@ public:
   void Destroy(VkContext& ctx) override;
   void OnSwapchainRecreated(VkContext& ctx, VkSwapchain const& swapchain, RenderTargets& targets) override;
   void Record(FrameContext& frame, RenderTargets& targets) override;
-  void setDebugParameter(bool val) override;
+  void setDebugParameter(DebugParam& param) override;
 private:
 	void updateVertexBuffer();
 private:
@@ -30,7 +30,7 @@ private:
   vk::raii::Buffer index_buffer_{nullptr};
   vk::raii::DeviceMemory index_memory_{nullptr};
   std::array<Vertex, 3>  vertices_;
-  bool  debugParameter_{false};
+  DebugParam* debugParameter_ = nullptr;
 };
 
 } // namespace vkfw

@@ -2,7 +2,7 @@
 
 #include <memory>
 #include <vector>
-
+#include "vk/scene/common.hpp"
 #include "vk/renderer/FrameContext.hpp"
 #include "vk/renderer/RenderTargets.hpp"
 #include "vk/renderer/FrameGlobals.hpp"
@@ -24,12 +24,12 @@ public:
 
   void AddPass(std::unique_ptr<IRenderPass> pass);
 
-  bool Create(VkContext& ctx, VkSwapchain& swapchain, VkFrameSync& sync);
+  bool Create(VkContext& ctx, VkSwapchain& swapchain, VkFrameSync& sync,DebugParam& param);
   void Destroy(VkContext& ctx);
   void OnSwapchainRecreated(VkContext& ctx, VkSwapchain& swapchain, VkFrameSync& sync);
 
   // Returns false when swapchain needs recreation.
-  bool DrawFrame(VkContext& ctx, VkSwapchain& swapchain, VkFrameSync& sync, bool val,FrameGlobals const& globals);
+  bool DrawFrame(VkContext& ctx, VkSwapchain& swapchain, VkFrameSync& sync, FrameGlobals const& globals);
 
   RenderTargets& Targets() noexcept { return targets_; }
   RenderTargets const& Targets() const noexcept { return targets_; }

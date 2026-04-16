@@ -235,6 +235,7 @@ bool LightingPass::Create(VkContext& ctx, VkSwapchain const& swapchain, RenderTa
 void LightingPass::Destroy(VkContext&)
 {
   // raii handles clean themselves up
+  debugParameter_ = nullptr;
   pipeline_ = nullptr;
   pipeline_layout_ = nullptr;
   index_buffer_ = nullptr;
@@ -250,7 +251,7 @@ void LightingPass::OnSwapchainRecreated(VkContext&, VkSwapchain const&, RenderTa
 
 void LightingPass::Record(FrameContext& frame, RenderTargets&)
 {
-  if(debugParameter_){
+  if(debugParameter_&&debugParameter_->animation){
     updateVertexBuffer();
   }
   
@@ -298,8 +299,6 @@ void LightingPass::Record(FrameContext& frame, RenderTargets&)
   cmd.pushConstants<float>(*pipeline_layout_, vk::ShaderStageFlagBits::eFragment, 0, t);
   cmd.drawIndexed(3, 1, 0, 0, 0);
 
-  ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), *cmd);
-
   cmd.endRendering();
 
   // Transition to present.
@@ -313,8 +312,8 @@ void LightingPass::Record(FrameContext& frame, RenderTargets&)
                   vk::PipelineStageFlagBits2::eBottomOfPipe);
 }
 
-void LightingPass::setDebugParameter(bool val){
-  debugParameter_=val;
+void LightingPass::setDebugParameter(DebugParam& param){
+  debugParameter_=&param;
 }
 
 	void LightingPass::updateVertexBuffer()
