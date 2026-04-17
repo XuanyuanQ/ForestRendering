@@ -31,6 +31,7 @@ VertexOutput main(VertexInput input) {
     float4 worldPos = mul(input.instanceModel, float4(input.pos, 1.0));
     // 变换到裁剪空间
     output.sv_position = mul(ubo.proj, mul(ubo.view, worldPos));
+    //output.sv_position = float4(input.pos, 1.0);
     output.normal = mul((float3x3)input.instanceModel, input.normal);
     output.uv = input.uv;
     return output;

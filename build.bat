@@ -11,6 +11,9 @@ REM 生成 VS2022 x64 工程
 @REM cmake -S . -B build -DRENDER_BACKEND=VULKAN
 @REM cmake -S . -B build -DRENDER_BACKEND=BOTH
 set VULKAN_SDK=D:/Setup/VulkanSDK
+set VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation
+set VK_LAYER_SETTINGS_PATH=VULKAN_SDK/Config
+set VK_LOADER_DEBUG=error,warn
 
 :: 查看变量
 echo %VULKAN_SDK%

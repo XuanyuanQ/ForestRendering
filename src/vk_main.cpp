@@ -8,6 +8,7 @@
 #include "vk/features/post/PostProcessPass.hpp"
 #include "vk/features/shadow/ShadowPass.hpp"
 #include "vk/features/ui/ImGuiPass.hpp"
+#include "vk/features/terrain/TerrainPass.hpp"
 #include "vk/renderer/VkRenderer.hpp"
 
 #include <GLFW/glfw3.h>
@@ -25,55 +26,61 @@
 
 #include "vk/features/mesh/MeshPass.hpp"
 
-namespace {
-constexpr uint32_t kWidth = 800;
-constexpr uint32_t kHeight = 600;
-constexpr uint32_t kFramesInFlight = 2;
-
-struct SimpleCamera {
-  glm::vec3 pos{0.0f, 10.0f, 50.0f};
-  float yaw = -90.0f;
-  float pitch = -10.0f;
-  float move_speed = 20.0f;
-  float mouse_sens = 0.12f;
-
-  glm::vec3 Front() const {
-    float const yaw_r = glm::radians(yaw);
-    float const pitch_r = glm::radians(pitch);
-    glm::vec3 f{};
-    f.x = std::cos(yaw_r) * std::cos(pitch_r);
-    f.y = std::sin(pitch_r);
-    f.z = std::sin(yaw_r) * std::cos(pitch_r);
-    return glm::normalize(f);
-  }
-
-  glm::mat4 View() const {
-    return glm::lookAt(pos, pos + Front(), glm::vec3{0.0f, 1.0f, 0.0f});
-  }
-
-  glm::mat4 Proj(float aspect) const {
-    glm::mat4 p = glm::perspectiveRH_ZO(glm::radians(60.0f), aspect, 0.1f, 200.0f);
-    p[1][1] *= -1.0f; // Vulkan 需要翻转 Y
-    return p;
-  }
-
-  void AddMouseDelta(float dx, float dy) {
-    yaw += dx * mouse_sens;
-    pitch -= dy * mouse_sens;
-    pitch = glm::clamp(pitch, -89.0f, 89.0f);
-  }
-};
-
-
-static void FramebufferResizeCallback(GLFWwindow* window, int, int)
+namespace
 {
-  auto* resized = reinterpret_cast<bool*>(glfwGetWindowUserPointer(window));
-  if (resized)
-    *resized = true;
-}
+  constexpr uint32_t kWidth = 800;
+  constexpr uint32_t kHeight = 600;
+  constexpr uint32_t kFramesInFlight = 2;
+
+  struct SimpleCamera
+  {
+    glm::vec3 pos{0.0f, 10.0f, 50.0f};
+    float yaw = -90.0f;
+    float pitch = -10.0f;
+    float move_speed = 20.0f;
+    float mouse_sens = 0.12f;
+
+    glm::vec3 Front() const
+    {
+      float const yaw_r = glm::radians(yaw);
+      float const pitch_r = glm::radians(pitch);
+      glm::vec3 f{};
+      f.x = std::cos(yaw_r) * std::cos(pitch_r);
+      f.y = std::sin(pitch_r);
+      f.z = std::sin(yaw_r) * std::cos(pitch_r);
+      return glm::normalize(f);
+    }
+
+    glm::mat4 View() const
+    {
+      return glm::lookAt(pos, pos + Front(), glm::vec3{0.0f, 1.0f, 0.0f});
+    }
+
+    glm::mat4 Proj(float aspect) const
+    {
+      glm::mat4 p = glm::perspectiveRH_ZO(glm::radians(60.0f), aspect, 0.1f, 200.0f);
+      p[1][1] *= -1.0f; // Vulkan 需要翻转 Y
+      return p;
+    }
+
+    void AddMouseDelta(float dx, float dy)
+    {
+      yaw += dx * mouse_sens;
+      pitch -= dy * mouse_sens;
+      pitch = glm::clamp(pitch, -89.0f, 89.0f);
+    }
+  };
+
+  static void FramebufferResizeCallback(GLFWwindow *window, int, int)
+  {
+    auto *resized = reinterpret_cast<bool *>(glfwGetWindowUserPointer(window));
+    if (resized)
+      *resized = true;
+  }
 } // namespace
 
-class VkMainApp::Impl {
+class VkMainApp::Impl
+{
 public:
   int Run()
   {
@@ -85,7 +92,7 @@ public:
   }
 
 private:
-  GLFWwindow* window_ = nullptr;
+  GLFWwindow *window_ = nullptr;
   bool framebuffer_resized_ = false;
 
   vkfw::VkContext ctx_{};
@@ -114,12 +121,12 @@ private:
   {
     vkfw::ContextCreateInfo ci{};
     ci.window = window_;
-    #ifdef NDEBUG
-        ci.enable_validation = false;
-    #else
-        ci.enable_validation = true;
-    #endif
-        ctx_.Init(ci);
+#ifdef NDEBUG
+    ci.enable_validation = true;
+#else
+    ci.enable_validation = true;
+#endif
+    ctx_.Init(ci);
 
     sync_.Init(ctx_, kFramesInFlight);
 
@@ -127,8 +134,6 @@ private:
     vkfw::SwapchainInfo si{};
     swapchain_.Init(ctx_, si);
     sync_.EnsureRenderFinishedSize(ctx_, swapchain_.ImageCount());
-  
-    
 
     // Shadow -> GBuffer -> Post -> Lighting -> UI
     std::string modelPath = "res/47-mapletree/MapleTree.obj";
@@ -137,8 +142,9 @@ private:
     // renderer_.AddPass(std::make_unique<vkfw::GBufferPass>());
     // renderer_.AddPass(std::make_unique<vkfw::PostProcessPass>());
     // renderer_.AddPass(std::make_unique<vkfw::LightingPass>()); // draws the triangle for now
+    renderer_.AddPass(std::make_unique<vkfw::TerrainPass>());
     renderer_.AddPass(std::make_unique<vkfw::ImGuiPass>());
-    if (!renderer_.Create(ctx_, swapchain_, sync_,debugParameter_))
+    if (!renderer_.Create(ctx_, swapchain_, sync_, debugParameter_))
       throw std::runtime_error("vkfw::VkRenderer::Create failed");
   }
 
@@ -146,7 +152,8 @@ private:
   {
     int w = 0, h = 0;
     glfwGetFramebufferSize(window_, &w, &h);
-    while (w == 0 || h == 0) {
+    while (w == 0 || h == 0)
+    {
       glfwGetFramebufferSize(window_, &w, &h);
       glfwWaitEvents();
     }
@@ -166,19 +173,22 @@ private:
     bool mouse_look = false;
     double last_x = 0.0, last_y = 0.0;
 
-    while (!glfwWindowShouldClose(window_)) {
+    while (!glfwWindowShouldClose(window_))
+    {
       glfwPollEvents();
 
       auto now = clock::now();
       float dt = std::chrono::duration<float>(now - last_time).count();
-      float t  = std::chrono::duration<float>(now - start_time).count();
+      float t = std::chrono::duration<float>(now - start_time).count();
       last_time = now;
       if (glfwGetKey(window_, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window_, GLFW_TRUE);
 
       // RMB mouse look
-      if (glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS) {
-        if (!mouse_look) {
+      if (glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
+      {
+        if (!mouse_look)
+        {
           mouse_look = true;
           glfwSetInputMode(window_, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
           glfwGetCursorPos(window_, &last_x, &last_y);
@@ -186,8 +196,11 @@ private:
         double x, y;
         glfwGetCursorPos(window_, &x, &y);
         camera.AddMouseDelta(static_cast<float>(x - last_x), static_cast<float>(y - last_y));
-        last_x = x; last_y = y;
-      } else if (mouse_look) {
+        last_x = x;
+        last_y = y;
+      }
+      else if (mouse_look)
+      {
         mouse_look = false;
         glfwSetInputMode(window_, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
       }
@@ -196,12 +209,18 @@ private:
       glm::vec3 r = glm::normalize(glm::cross(f, glm::vec3{0.0f, 1.0f, 0.0f}));
       float speed = camera.move_speed * dt;
 
-      if (glfwGetKey(window_, GLFW_KEY_W) == GLFW_PRESS) camera.pos += f * speed;
-      if (glfwGetKey(window_, GLFW_KEY_S) == GLFW_PRESS) camera.pos -= f * speed;
-      if (glfwGetKey(window_, GLFW_KEY_D) == GLFW_PRESS) camera.pos += r * speed;
-      if (glfwGetKey(window_, GLFW_KEY_A) == GLFW_PRESS) camera.pos -= r * speed;
-      if (glfwGetKey(window_, GLFW_KEY_E) == GLFW_PRESS) camera.pos += glm::vec3{0,1,0} * speed;
-      if (glfwGetKey(window_, GLFW_KEY_Q) == GLFW_PRESS) camera.pos -= glm::vec3{0,1,0} * speed;
+      if (glfwGetKey(window_, GLFW_KEY_W) == GLFW_PRESS)
+        camera.pos += f * speed;
+      if (glfwGetKey(window_, GLFW_KEY_S) == GLFW_PRESS)
+        camera.pos -= f * speed;
+      if (glfwGetKey(window_, GLFW_KEY_D) == GLFW_PRESS)
+        camera.pos += r * speed;
+      if (glfwGetKey(window_, GLFW_KEY_A) == GLFW_PRESS)
+        camera.pos -= r * speed;
+      if (glfwGetKey(window_, GLFW_KEY_E) == GLFW_PRESS)
+        camera.pos += glm::vec3{0, 1, 0} * speed;
+      if (glfwGetKey(window_, GLFW_KEY_Q) == GLFW_PRESS)
+        camera.pos -= glm::vec3{0, 1, 0} * speed;
 
       vkfw::FrameGlobals globals{};
       globals.view = camera.View();
@@ -219,27 +238,28 @@ private:
   {
     ctx_.Device().waitIdle();
 
-    if (ctx_.IsInitialized()) {
+    if (ctx_.IsInitialized())
+    {
       renderer_.Destroy(ctx_);
       swapchain_.Shutdown(ctx_);
       sync_.Shutdown(ctx_);
       ctx_.Shutdown();
     }
 
-    if (window_ != nullptr) {
+    if (window_ != nullptr)
+    {
       glfwDestroyWindow(window_);
       window_ = nullptr;
     }
 
     glfwTerminate();
   }
-
 };
 
 VkMainApp::VkMainApp() : impl_(new Impl()) {}
 VkMainApp::~VkMainApp() = default;
-VkMainApp::VkMainApp(VkMainApp&&) noexcept = default;
-VkMainApp& VkMainApp::operator=(VkMainApp&&) noexcept = default;
+VkMainApp::VkMainApp(VkMainApp &&) noexcept = default;
+VkMainApp &VkMainApp::operator=(VkMainApp &&) noexcept = default;
 
 int VkMainApp::Run() { return impl_->Run(); }
 
