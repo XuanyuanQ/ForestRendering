@@ -1,12 +1,118 @@
-#pragma once
 #include "vk/renderer/helper.hpp"
-#define STB_IMAGE_IMPLEMENTATION
-#include "vk/scene/stb_image.h"
 #include "vk/renderer/IRenderPass.hpp"
+#include "config.hpp"
 
+#include <stb_image.h>
+
+#include <algorithm>
+#include <cerrno>
+#include <cstring>
+#include <fstream>
 #include <iostream>
+#include <sstream>
+#include <string>
+#include <vector>
+
+#if defined(_WIN32)
+#include <direct.h>
+#else
+#include <unistd.h>
+#endif
 namespace vkfw
 {
+  namespace
+  {
+    static std::string GetCwd()
+    {
+#if defined(_WIN32)
+      char buf[4096]{};
+      if (_getcwd(buf, sizeof(buf)) != nullptr)
+        return std::string(buf);
+      return std::string("<unknown>");
+#else
+      char buf[4096]{};
+      if (getcwd(buf, sizeof(buf)) != nullptr)
+        return std::string(buf);
+      return std::string("<unknown>");
+#endif
+    }
+
+    static bool FileExists(std::string const &path)
+    {
+      std::ifstream f(path.c_str(), std::ios::binary);
+      return f.good();
+    }
+
+    static bool StartsWith(std::string const &s, std::string const &prefix)
+    {
+      return s.size() >= prefix.size() && s.compare(0, prefix.size(), prefix) == 0;
+    }
+
+    static std::string RootDirFromConfig()
+    {
+      // `config::resources_path()` picks "." when the requested file exists in CWD.
+      // We want the baked-in project root regardless of CWD, so we ask for a (likely)
+      // missing file and strip the known suffix.
+      static std::string cached = []() {
+        std::string const marker = "__codex_missing_resource_marker__";
+        std::string const dummy = config::resources_path(marker); // "<root>/res/<marker>"
+
+        std::string const suffix = std::string("/res/") + marker;
+        if (dummy.size() >= suffix.size() &&
+            dummy.compare(dummy.size() - suffix.size(), suffix.size(), suffix) == 0)
+        {
+          return dummy.substr(0, dummy.size() - suffix.size());
+        }
+
+        // Fallback: best-effort strip at the last "/res/".
+        auto const pos = dummy.rfind("/res/");
+        if (pos != std::string::npos)
+          return dummy.substr(0, pos);
+        return std::string(".");
+      }();
+      return cached;
+    }
+
+    static std::vector<std::string> BuildTextureCandidates(std::string const &path)
+    {
+      std::vector<std::string> candidates;
+      candidates.reserve(10);
+
+      auto const root = RootDirFromConfig();
+
+      // 1) Original path as provided by the caller.
+      candidates.push_back(path);
+
+      // 2) If it looks like "res/...", force project-root version regardless of CWD.
+      if (StartsWith(path, "res/"))
+      {
+        candidates.push_back(root + "/" + path);
+        // Also try config helper (may still resolve to "." depending on CWD, but cheap).
+        candidates.push_back(config::resources_path(path.substr(4)));
+      }
+      else
+      {
+        // Treat it as a resource-relative path.
+        candidates.push_back(config::resources_path(path));
+        candidates.push_back(root + "/res/" + path);
+      }
+
+      // 3) Common when launching from nested build folders.
+      candidates.push_back(std::string("../") + path);
+      candidates.push_back(std::string("../../") + path);
+      candidates.push_back(std::string("../../../") + path);
+
+      // Deduplicate while preserving order.
+      std::vector<std::string> uniq;
+      uniq.reserve(candidates.size());
+      for (auto const &p : candidates)
+      {
+        if (std::find(uniq.begin(), uniq.end(), p) == uniq.end())
+          uniq.push_back(p);
+      }
+      return uniq;
+    }
+  } // namespace
 
   TextureResource IRenderPass::LoadTextureResource(
       vk::raii::Device &device,
@@ -16,10 +122,37 @@ namespace vkfw
   {
     // 1. Load pixels
     int w, h, c;
-    stbi_uc *pixels = stbi_load(path.c_str(), &w, &h, &c, STBI_rgb_alpha);
+    stbi_uc *pixels = nullptr;
+    std::string chosen;
+    auto const candidates = BuildTextureCandidates(path);
+    for (auto const &p : candidates)
+    {
+      if (!FileExists(p))
+        continue;
+      pixels = stbi_load(p.c_str(), &w, &h, &c, STBI_rgb_alpha);
+      if (pixels != nullptr)
+      {
+        chosen = p;
+        break;
+      }
+    }
     if (!pixels)
     {
-      throw std::runtime_error("Failed to load texture: " + path);
+      std::ostringstream oss;
+      oss << "Failed to load texture: " << path;
+      oss << " (cwd=" << GetCwd() << ")";
+      oss << " (exists=" << (FileExists(path) ? 1 : 0) << ")";
+      if (auto const *reason = stbi_failure_reason())
+        oss << " (stb_reason=" << reason << ")";
+      oss << " (tried=";
+      for (size_t i = 0; i < candidates.size(); ++i)
+      {
+        if (i)
+          oss << ", ";
+        oss << candidates[i];
+      }
+      oss << ")";
+      throw std::runtime_error(oss.str());
     }
     vk::DeviceSize imageSize = static_cast<vk::DeviceSize>(w) * h * 4;
 

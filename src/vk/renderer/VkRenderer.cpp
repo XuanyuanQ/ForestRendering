@@ -225,6 +225,19 @@ namespace vkfw
     cmd.reset();
     cmd.begin(vk::CommandBufferBeginInfo{});
 
+    // Transition swapchain image to a renderable layout once per frame.
+    vk::ImageLayout const initial_layout =
+        swapchain.IsFirstUse(image_index) ? vk::ImageLayout::eUndefined : vk::ImageLayout::ePresentSrcKHR;
+    TransitionImage(cmd,
+                    swapchain.Image(image_index),
+                    initial_layout,
+                    vk::ImageLayout::eColorAttachmentOptimal,
+                    vk::ImageAspectFlagBits::eColor,
+                    {},
+                    vk::AccessFlagBits2::eColorAttachmentWrite,
+                    vk::PipelineStageFlagBits2::eTopOfPipe,
+                    vk::PipelineStageFlagBits2::eColorAttachmentOutput);
+
     vk::Image const raw_depth_img = static_cast<vk::Image>(shared_depth_img_);
     if (static_cast<VkImage>(raw_depth_img) != VK_NULL_HANDLE && shared_depth_layout_ != vk::ImageLayout::eDepthAttachmentOptimal)
     {
@@ -249,12 +262,26 @@ namespace vkfw
     frame.swapchain_format = swapchain.Format();
     frame.swapchain_image = swapchain.Image(image_index);
     frame.swapchain_image_view = swapchain.ImageView(image_index);
-    frame.swapchain_old_layout =
-        swapchain.IsFirstUse(image_index) ? vk::ImageLayout::eUndefined : vk::ImageLayout::ePresentSrcKHR;
+    frame.swapchain_old_layout = vk::ImageLayout::eColorAttachmentOptimal;
     frame.globals = &globals;
     for (auto &pass : passes_)
     {
       pass->Record(frame, targets_);
+    }
+
+    // If the final pass didn't transition to Present, do it here.
+    if (frame.swapchain_old_layout != vk::ImageLayout::ePresentSrcKHR)
+    {
+      TransitionImage(cmd,
+                      frame.swapchain_image,
+                      frame.swapchain_old_layout,
+                      vk::ImageLayout::ePresentSrcKHR,
+                      vk::ImageAspectFlagBits::eColor,
+                      vk::AccessFlagBits2::eColorAttachmentWrite,
+                      {},
+                      vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                      vk::PipelineStageFlagBits2::eBottomOfPipe);
+      frame.swapchain_old_layout = vk::ImageLayout::ePresentSrcKHR;
     }
 
     cmd.end();

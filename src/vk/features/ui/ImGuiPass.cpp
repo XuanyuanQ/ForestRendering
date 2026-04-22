@@ -4,6 +4,7 @@
 #include "vk/core/VkSwapchain.hpp"
 #include "vk/renderer/FrameContext.hpp"
 #include "vk/renderer/RenderTargets.hpp"
+#include "vk/renderer/helper.hpp"
 #include <imgui_impl_glfw.h>
 #define IMGUI_IMPL_VULKAN_HAS_DYNAMIC_RENDERING
 #include <array>
@@ -25,7 +26,6 @@ bool ImGuiPass::Create(VkContext& ctx, VkSwapchain const& swapchain, RenderTarge
   return true;
 }
 
-const static VkFormat color_format = VK_FORMAT_B8G8R8A8_UNORM;
 void ImGuiPass::InitImGuiDynamic(VkContext& ctx, VkSwapchain const& swapchain, RenderTargets& targets) 
 {
     // --- 1. 数据准备 ---
@@ -110,8 +110,8 @@ void ImGuiPass::InitImGuiDynamic(VkContext& ctx, VkSwapchain const& swapchain, R
   // 重点：手动设置 sType 
   initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO;
   initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
-  static VkFormat format = VK_FORMAT_B8G8R8A8_UNORM; // 确保格式与交换链一致
-  initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = &format;
+  imgui_color_format_ = static_cast<VkFormat>(swapChainFormat);
+  initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = &imgui_color_format_;
   initInfo.CheckVkResultFn = [](VkResult err) {
     if (err != VK_SUCCESS)
       std::cerr << "[ImGui] Vulkan Error: " << static_cast<int>(err) << std::endl;
@@ -138,7 +138,9 @@ void ImGuiPass::Destroy(VkContext& ctx) {
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplGlfw_Shutdown();
     ImGui::DestroyContext();
-    
+    imu_resources_.descriptorPool = nullptr;
+    imgui_color_format_ = VK_FORMAT_UNDEFINED;
+    IRenderPass::Destroy(ctx);
 }
 
 void ImGuiPass::OnSwapchainRecreated(VkContext&, VkSwapchain const&, RenderTargets&) {}
@@ -202,6 +204,17 @@ void ImGuiPass::Record(FrameContext& frame, RenderTargets& targets) {
 
     cmd.endRendering();
 
+    // Final transition back to Present for vkQueuePresentKHR.
+    TransitionImage(cmd,
+                    frame.swapchain_image,
+                    vk::ImageLayout::eColorAttachmentOptimal,
+                    vk::ImageLayout::ePresentSrcKHR,
+                    vk::ImageAspectFlagBits::eColor,
+                    vk::AccessFlagBits2::eColorAttachmentWrite,
+                    {},
+                    vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                    vk::PipelineStageFlagBits2::eBottomOfPipe);
+    frame.swapchain_old_layout = vk::ImageLayout::ePresentSrcKHR;
 
 }
 
@@ -210,4 +223,3 @@ void ImGuiPass::setDebugParameter(DebugParam& param){
 }
 
 } // namespace vkfw
-

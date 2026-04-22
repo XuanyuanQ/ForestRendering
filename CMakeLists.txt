@@ -334,6 +334,7 @@ if (BUILD_VULKAN)
 		assignment_setup
 		glfw
 		Vulkan::Vulkan
+		stb::stb
 		
 		${CMAKE_DL_LIBS}
 		

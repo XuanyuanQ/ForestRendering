@@ -490,12 +490,7 @@ namespace vkfw
       std::memcpy(ubo_map_[img], &ubo, sizeof(ubo));
     }
 
-    // 2. 图像布局转换 (从 Present/Undefined 转换为 Attachment)
-    TransitionImage(cmd, frame.swapchain_image, frame.swapchain_old_layout, vk::ImageLayout::eColorAttachmentOptimal,
-                    vk::ImageAspectFlagBits::eColor, {}, vk::AccessFlagBits2::eColorAttachmentWrite,
-                    vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::PipelineStageFlagBits2::eColorAttachmentOutput);
-
-    // 3. 设置清理值与渲染附件
+    // 2. 设置清理值与渲染附件
     vk::ClearValue clear_color{};
     clear_color.color = vk::ClearColorValue(std::array<float, 4>{{0.05f, 0.06f, 0.08f, 1.0f}});
 

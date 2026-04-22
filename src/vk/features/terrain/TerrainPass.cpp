@@ -392,6 +392,9 @@ namespace vkfw
     ctx.Device().waitIdle();
     pipeline_ = nullptr;
     pipeline_layout_ = nullptr;
+    ds_.clear();
+    dp_ = nullptr;
+    dsl_ = nullptr;
     index_buffer_ = nullptr;
     index_memory_ = nullptr;
     vertex_buffer_ = nullptr;
@@ -436,16 +439,6 @@ namespace vkfw
     {
       std::memcpy(ubo_map_[img], &ubo, sizeof(ubo));
     }
-
-    // Transition swapchain image for rendering.
-    TransitionImage(cmd,
-                    frame.swapchain_image,
-                    frame.swapchain_old_layout,
-                    vk::ImageLayout::eColorAttachmentOptimal,
-                    {},
-                    vk::AccessFlagBits2::eColorAttachmentWrite,
-                    vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-                    vk::PipelineStageFlagBits2::eColorAttachmentOutput);
 
     vk::ClearValue clear{};
     clear.color = vk::ClearColorValue(std::array<float, 4>{{0.0f, 0.0f, 0.0f, 1.0f}});

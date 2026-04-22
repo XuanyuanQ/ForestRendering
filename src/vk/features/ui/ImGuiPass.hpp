@@ -23,7 +23,7 @@ private:
 private:
     vkfw::ImGuiResources imu_resources_;
     DebugParam* debugParameter_ = nullptr;
+    VkFormat imgui_color_format_ = VK_FORMAT_UNDEFINED;
 };
 
 } // namespace vkfw
-
