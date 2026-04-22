@@ -284,11 +284,13 @@ if (BUILD_VULKAN)
 	set(VK_SHADER_SOURCES
 	"${CMAKE_SOURCE_DIR}/shaders/vk/mesh.vert.slang"
 	"${CMAKE_SOURCE_DIR}/shaders/vk/mesh.frag.slang"
+	"${CMAKE_SOURCE_DIR}/shaders/vk/terrain.slang"
 	)
 
 	set(VK_SHADER_SPV_OUTPUTS "")
 	foreach(shader_src IN LISTS VK_SHADER_SOURCES)
-	get_filename_component(shader_name "${shader_src}" NAME)
+	get_filename_component(shader_full_name "${shader_src}" NAME)
+	string(REPLACE ".slang" "" shader_name "${shader_full_name}")
 	set(shader_out "${CMAKE_CURRENT_BINARY_DIR}/res/vk/${shader_name}.spv")
 	add_custom_command(
 		OUTPUT "${shader_out}"
@@ -297,6 +299,10 @@ if (BUILD_VULKAN)
 		DEPENDS "${shader_src}"
 		VERBATIM
 	)
+	file(GLOB SPV_FILES "${CMAKE_CURRENT_BINARY_DIR}/res/vk/*.spv")
+	if(SPV_FILES)
+    file(COPY ${SPV_FILES} DESTINATION "${CMAKE_SOURCE_DIR}/res/vk")
+	endif()
 	list(APPEND VK_SHADER_SPV_OUTPUTS "${shader_out}")
 	endforeach()
 

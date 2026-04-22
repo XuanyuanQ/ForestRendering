@@ -157,7 +157,7 @@ namespace vkfw
     auto &device = ctx.Device();
 
     // Shaders: reuse the existing demo SPIR-V that contains vertMain/fragMain.
-    auto const code = ReadFile("res/09_shader_base.spv");
+    auto const code = ReadFile("res/vk/terrain.spv");
     vk::ShaderModuleCreateInfo sm_ci{};
     sm_ci.codeSize = code.size();
     sm_ci.pCode = reinterpret_cast<uint32_t const *>(code.data());
