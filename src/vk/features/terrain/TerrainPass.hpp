@@ -20,6 +20,31 @@ namespace vkfw
 
   private:
     void updateVertexBuffer();
+    vk::raii::DescriptorSetLayout CreateDescriptorSetLayout(const vk::raii::Device &device);
+    vk::raii::DescriptorPool CreateDescriptorPool(const vk::raii::Device &device, const int image_count);
+    /**
+     * @brief 为每一帧分配 Uniform Buffer 及其背后的内存映射
+     * @param device 逻辑设备句柄
+     * @param mem_props 物理设备内存属性（用于查找内存类型）
+     * @param image_count 需要创建的数量（通常等于 Swapchain Image Count）
+     */
+    void CreateUniformBuffers(
+        const VkContext &ctx,
+        const vk::PhysicalDeviceMemoryProperties &mem_props,
+        uint32_t image_count);
+    void CreateVertexBuffer(
+        const VkContext &ctx,
+        const vk::PhysicalDeviceMemoryProperties &mem_props,
+        const Model &model);
+    void CreateIndexBuffer(
+        const VkContext &ctx,
+        const vk::PhysicalDeviceMemoryProperties &mem_props,
+        const Model &model);
+    void CreatePipeline(const vk::raii::Device &device,
+                        const std::string &shader_path,
+                        vk::Format color_format,
+                        vk::Format depth_format);
+    void UpdateDescriptorSets(const vk::raii::Device &device, uint32_t image_count);
 
   private:
     struct alignas(16) CameraUBO

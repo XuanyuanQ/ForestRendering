@@ -54,8 +54,6 @@ namespace vkfw
         {
             glm::mat4 model;
         };
-        uint32_t FindMemoryType(VkContext &ctx, uint32_t type_bits, vk::MemoryPropertyFlags required);
-        std::vector<char> ReadFile(std::string const &filename);
 
         std::string model_path_;
         std::vector<SubMesh> sub_meshes_;
