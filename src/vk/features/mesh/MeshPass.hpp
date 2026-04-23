@@ -26,14 +26,6 @@ namespace vkfw
         void Record(FrameContext &frame, RenderTargets &targets) override;
 
     private:
-        struct alignas(16) CameraUBO
-        {
-            glm::mat4 view{1.0f};
-            glm::mat4 proj{1.0f};
-            glm::mat4 model{1.0f};
-            glm::vec4 camera_pos{0.0f};
-        };
-
         // 子网格结构体：用于区分树干和树叶
         struct SubMesh
         {

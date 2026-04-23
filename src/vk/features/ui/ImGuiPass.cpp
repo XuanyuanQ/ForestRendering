@@ -196,6 +196,10 @@ namespace vkfw
       if (debugParameter_)
       {
         ImGui::Checkbox("Animation", &debugParameter_->animation);
+        ImGui::SliderFloat("Day Speed", &debugParameter_->daySpeed, 0.1f, 5.0f);
+        ImGui::SliderFloat("Light X", &debugParameter_->lightX, -200.0f, 200.0f);
+        ImGui::SliderFloat("Light Y", &debugParameter_->lightY, -200.0f, 200.0f);
+        ImGui::SliderFloat("Light Z", &debugParameter_->lightZ, -200.0f, 200.0f);
       }
 
       ImGui::SliderFloat("scale", &treeScale, 0.1f, 5.0f);

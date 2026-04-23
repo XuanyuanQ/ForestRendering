@@ -426,6 +426,7 @@ namespace vkfw
     CameraUBO ubo{};
     ubo.view = frame.globals->view;
     ubo.proj = frame.globals->proj;
+    ubo.light = frame.globals->light;
     ubo.model = glm::mat4(1.0f);
     ubo.camera_pos = glm::vec4(frame.globals->camera_pos, 1.0f);
 

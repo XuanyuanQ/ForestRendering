@@ -99,7 +99,9 @@ private:
   vkfw::VkSwapchain swapchain_{};
   vkfw::VkFrameSync sync_{};
   vkfw::VkRenderer renderer_{};
+  glm::vec3 _lightPosition{0.0f, 10.0f, 50.0f};
   vkfw::DebugParam debugParameter_;
+  float _sunTime = 0.0f;
 
   void InitWindow()
   {
@@ -181,6 +183,32 @@ private:
       float dt = std::chrono::duration<float>(now - last_time).count();
       float t = std::chrono::duration<float>(now - start_time).count();
       last_time = now;
+
+      // Day/Night Cycle
+      if (debugParameter_.animation)
+      {
+        float deltaTimeUs = (float)(dt / 1000000.0);
+        _sunTime += dt * debugParameter_.daySpeed;
+      }
+      // Simulated solar orbit
+      float daySpeed = 0.5f;
+      float sunRadius = 100.0f; // Sun distance (For directional light, this value
+                                // only affects direction, not attenuation)
+      float x_factor = 2.0;
+      float y_factor = 4.0;
+
+      if (!debugParameter_.animation)
+      {
+        _lightPosition.x = sin(_sunTime) * sunRadius;
+        _lightPosition.y = cos(_sunTime) * sunRadius;
+        _lightPosition.z = -100.0f;
+      }
+      else
+      {
+        _lightPosition = glm::vec3(debugParameter_.lightX, debugParameter_.lightY, debugParameter_.lightZ);
+      }
+      auto light_world_to_clip_matrix = updateLightMatrix(_lightPosition);
+
       if (glfwGetKey(window_, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window_, GLFW_TRUE);
 
@@ -223,6 +251,8 @@ private:
         camera.pos -= glm::vec3{0, 1, 0} * speed;
 
       vkfw::FrameGlobals globals{};
+      light_world_to_clip_matrix;
+      globals.light = light_world_to_clip_matrix;
       globals.view = camera.View();
       globals.proj = camera.Proj(float(swapchain_.Extent().width) / float(swapchain_.Extent().height));
       globals.camera_pos = camera.pos;
@@ -232,6 +262,26 @@ private:
       if (!renderer_.DrawFrame(ctx_, swapchain_, sync_, globals))
         RecreateSwapchain();
     }
+  }
+
+  glm::mat4 updateLightMatrix(const glm::vec3 light_pos)
+  {
+
+    // Defines the size of the area covered by the shadow.
+    float boxSize = 150.0f;
+
+    // Near/Far
+    // float nearPlane = 1.0f;
+    // float farPlane = 3000.0f;
+    float nearPlane = 1.0f, farPlane = 1000.5f;
+    auto lightProjection =
+        glm::ortho(-boxSize, boxSize, -boxSize, boxSize, nearPlane, farPlane);
+
+    glm::vec3 target = glm::vec3(0.0f, 0.0f, 0.0f); // center of forest
+    glm::mat4 lightView =
+        glm::lookAt(light_pos, target, glm::vec3(0.0, 1.0, 0.2));
+
+    return lightProjection * lightView;
   }
 
   void Cleanup()

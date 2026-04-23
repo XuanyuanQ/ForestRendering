@@ -47,13 +47,6 @@ namespace vkfw
     void UpdateDescriptorSets(const vk::raii::Device &device, uint32_t image_count);
 
   private:
-    struct alignas(16) CameraUBO
-    {
-      glm::mat4 view{1.0f};
-      glm::mat4 proj{1.0f};
-      glm::mat4 model{1.0f};
-      glm::vec4 camera_pos{0.0f};
-    };
     vk::raii::PipelineLayout pipeline_layout_{nullptr};
     vk::raii::Pipeline pipeline_{nullptr};
     vk::raii::Buffer vertex_buffer_{nullptr};
