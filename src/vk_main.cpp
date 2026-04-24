@@ -9,6 +9,7 @@
 #include "vk/features/shadow/ShadowPass.hpp"
 #include "vk/features/ui/ImGuiPass.hpp"
 #include "vk/features/terrain/TerrainPass.hpp"
+#include "vk/features/skybox/SkyboxPass.hpp"
 #include "vk/renderer/VkRenderer.hpp"
 
 #include <GLFW/glfw3.h>
@@ -139,6 +140,7 @@ private:
 
     // Shadow -> GBuffer -> Post -> Lighting -> UI
     std::string modelPath = "res/47-mapletree/MapleTree.obj";
+    renderer_.AddPass(std::make_unique<vkfw::SkyboxPass>());
     renderer_.AddPass(std::make_unique<vkfw::MeshPass>(modelPath));
     // renderer_.AddPass(std::make_unique<vkfw::ShadowPass>());
     // renderer_.AddPass(std::make_unique<vkfw::GBufferPass>());
@@ -256,6 +258,7 @@ private:
       globals.view = camera.View();
       globals.proj = camera.Proj(float(swapchain_.Extent().width) / float(swapchain_.Extent().height));
       globals.camera_pos = camera.pos;
+      globals.light_position = glm::vec3{std::cos(t * 0.2f), std::sin(t * 0.2f), 0.2f};
       globals.time_seconds = t;
       globals.delta_seconds = dt;
 

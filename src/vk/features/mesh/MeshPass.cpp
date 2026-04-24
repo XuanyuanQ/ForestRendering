@@ -442,14 +442,14 @@ namespace vkfw
     vk::RenderingAttachmentInfo color_att{};
     color_att.imageView = frame.swapchain_image_view;
     color_att.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
-    color_att.loadOp = vk::AttachmentLoadOp::eClear;
+    color_att.loadOp = vk::AttachmentLoadOp::eLoad;
     color_att.storeOp = vk::AttachmentStoreOp::eStore;
     color_att.clearValue = clear_color;
 
     vk::RenderingAttachmentInfo depth_att{};
     depth_att.imageView = targets.shared_depth.view;
     depth_att.imageLayout = vk::ImageLayout::eDepthAttachmentOptimal;
-    depth_att.loadOp = vk::AttachmentLoadOp::eClear;
+    depth_att.loadOp = vk::AttachmentLoadOp::eLoad;
     depth_att.storeOp = vk::AttachmentStoreOp::eStore;
     depth_att.clearValue = clear_depth;
 
@@ -498,11 +498,6 @@ namespace vkfw
     }
 
     cmd.endRendering();
-
-    // 5. 转换回可显示布局
-    TransitionImage(cmd, frame.swapchain_image, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR,
-                    vk::ImageAspectFlagBits::eColor, vk::AccessFlagBits2::eColorAttachmentWrite, {},
-                    vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::PipelineStageFlagBits2::eBottomOfPipe);
   }
 
 } // namespace vkfw
