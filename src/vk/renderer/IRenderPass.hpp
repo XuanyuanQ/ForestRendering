@@ -27,7 +27,7 @@ namespace vkfw
 
     virtual void OnSwapchainRecreated(VkContext &ctx, VkSwapchain const &swapchain, RenderTargets &targets) = 0;
     virtual void Record(FrameContext &frame, RenderTargets &targets) = 0;
-
+    virtual void JustDraw(vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index) {};
     virtual void setDebugParameter(DebugParam &param) {
 
     };

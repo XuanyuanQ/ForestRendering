@@ -195,8 +195,10 @@ namespace vkfw
       static float treeScale = 1.0f;
       if (debugParameter_)
       {
-        ImGui::Checkbox("Animation", &debugParameter_->animation);
+        ImGui::Checkbox("Auto Sun (Animation)", &debugParameter_->animation);
+        ImGui::Checkbox("Apply ShadowMap", &debugParameter_->shadowmap);
         ImGui::SliderFloat("Day Speed", &debugParameter_->daySpeed, 0.1f, 5.0f);
+        ImGui::TextUnformatted("Uncheck Auto Sun to use manual Light X/Y/Z.");
         ImGui::SliderFloat("Light X", &debugParameter_->lightX, -200.0f, 200.0f);
         ImGui::SliderFloat("Light Y", &debugParameter_->lightY, -200.0f, 200.0f);
         ImGui::SliderFloat("Light Z", &debugParameter_->lightZ, -200.0f, 200.0f);

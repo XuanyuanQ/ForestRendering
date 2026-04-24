@@ -280,15 +280,11 @@ if (BUILD_VULKAN)
 	if (NOT SLANGC_EXECUTABLE)
 	message(FATAL_ERROR "slangc not found")
 	endif()
-	if (NOT GLSLC_EXECUTABLE)
-	message(FATAL_ERROR "glslc not found")
-	endif()
 
-	set(VK_SHADER_SOURCES
-	"${CMAKE_SOURCE_DIR}/shaders/vk/mesh.vert.slang"
-	"${CMAKE_SOURCE_DIR}/shaders/vk/mesh.frag.slang"
-	"${CMAKE_SOURCE_DIR}/shaders/vk/terrain.slang"
-	)
+	# Only compile Slang sources here; GLSL sources are handled separately below.
+	file(GLOB VK_SHADER_SOURCES "${CMAKE_SOURCE_DIR}/shaders/vk/*.slang")
+	# message(STATUS "Searching in: ${CMAKE_SOURCE_DIR}/shaders/vk/")
+	# message(STATUS "Found shaders: ${VK_SHADER_SOURCES}")
 
 	set(VK_GLSL_SHADER_SOURCES
 	"${CMAKE_SOURCE_DIR}/shaders/vk/skybox.vert"
@@ -307,10 +303,6 @@ if (BUILD_VULKAN)
 		DEPENDS "${shader_src}"
 		VERBATIM
 	)
-	file(GLOB SPV_FILES "${CMAKE_CURRENT_BINARY_DIR}/res/vk/*.spv")
-	if(SPV_FILES)
-    file(COPY ${SPV_FILES} DESTINATION "${CMAKE_SOURCE_DIR}/res/vk")
-	endif()
 	list(APPEND VK_SHADER_SPV_OUTPUTS "${shader_out}")
 	endforeach()
 
@@ -328,6 +320,14 @@ if (BUILD_VULKAN)
 	endforeach()
 
 	add_custom_target(vk_shaders DEPENDS ${VK_SHADER_SPV_OUTPUTS})
+	# Copy compiled shader binaries to the runtime `res/vk` folder after build.
+	add_custom_command(
+		TARGET vk_shaders
+		POST_BUILD
+		COMMAND "${CMAKE_COMMAND}" -E make_directory "${CMAKE_SOURCE_DIR}/res/vk"
+		COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_CURRENT_BINARY_DIR}/res/vk" "${CMAKE_SOURCE_DIR}/res/vk"
+		VERBATIM
+	)
 
 	add_executable(ForestSceneVk
 		${MAIN_SOURCE}

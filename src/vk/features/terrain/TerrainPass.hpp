@@ -17,9 +17,10 @@ namespace vkfw
     void Destroy(VkContext &ctx) override;
     void OnSwapchainRecreated(VkContext &ctx, VkSwapchain const &swapchain, RenderTargets &targets) override;
     void Record(FrameContext &frame, RenderTargets &targets) override;
+    void JustDraw(vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index) override;
+    void setDebugParameter(DebugParam &param) override { debugParameter_ = &param; }
 
   private:
-    void updateVertexBuffer();
     vk::raii::DescriptorSetLayout CreateDescriptorSetLayout(const vk::raii::Device &device);
     vk::raii::DescriptorPool CreateDescriptorPool(const vk::raii::Device &device, const int image_count);
     /**
@@ -44,7 +45,7 @@ namespace vkfw
                         const std::string &shader_path,
                         vk::Format color_format,
                         vk::Format depth_format);
-    void UpdateDescriptorSets(const vk::raii::Device &device, uint32_t image_count);
+    void UpdateDescriptorSets(const vk::raii::Device &device, uint32_t image_count, RenderTargets const &targets);
 
   private:
     vk::raii::PipelineLayout pipeline_layout_{nullptr};
@@ -62,6 +63,8 @@ namespace vkfw
     std::vector<vk::raii::Buffer> ubo_buf_{};
     std::vector<vk::raii::DeviceMemory> ubo_mem_{};
     std::vector<void *> ubo_map_{};
+
+    DebugParam *debugParameter_ = nullptr;
   };
 
 } // namespace vkfw

@@ -4,6 +4,9 @@
 #include "vk/core/VkFrameSync.hpp"
 #include "vk/core/VkSwapchain.hpp"
 #include "vk/renderer/IRenderPass.hpp"
+#include "vk/features/terrain/TerrainPass.hpp"
+#include "vk/features/mesh/MeshPass.hpp"
+#include "vk/features/shadow/ShadowPass.hpp"
 #include "vk/renderer/helper.hpp"
 
 #include <array>
@@ -15,6 +18,15 @@ namespace vkfw
   void VkRenderer::AddPass(std::unique_ptr<IRenderPass> pass)
   {
     passes_.push_back(std::move(pass));
+  }
+  void VkRenderer::AddObjectPass(std::unique_ptr<IRenderPass> pass)
+  {
+    ObjectPasses_.push_back(std::move(pass));
+  }
+
+  void VkRenderer::setShowDepthPass(std::unique_ptr<ShadowPass> pass)
+  {
+    shadow_pass_ = std::move(pass);
   }
 
   void VkRenderer::SyncSharedDepthTargets() noexcept
@@ -110,12 +122,25 @@ namespace vkfw
     CreateCommandResources(ctx, sync);
     CreateSharedDepth(ctx, swapchain.Extent());
 
+    // Shadow pass must be created first so other passes can bind the shadow map in descriptors.
+    if (shadow_pass_)
+    {
+      shadow_pass_->Create(ctx, swapchain, targets_);
+    }
+
     for (auto &pass : passes_)
     {
       if (!pass->Create(ctx, swapchain, targets_))
         return false;
       pass->setDebugParameter(param);
     }
+
+    for (auto &pass : ObjectPasses_)
+    {
+      if (!pass->Create(ctx, swapchain, targets_))
+        return false;
+    }
+
     return true;
   }
 
@@ -124,6 +149,15 @@ namespace vkfw
     for (auto &pass : passes_)
     {
       pass->Destroy(ctx);
+    }
+    for (auto &pass : ObjectPasses_)
+    {
+      pass->Destroy(ctx);
+    }
+    if (shadow_pass_)
+    {
+      shadow_pass_->Destroy(ctx);
+      shadow_pass_.reset();
     }
     DestroySharedDepth(ctx);
     DestroyCommandResources(ctx);
@@ -136,6 +170,14 @@ namespace vkfw
     for (auto &pass : passes_)
     {
       pass->OnSwapchainRecreated(ctx, swapchain, targets_);
+    }
+    for (auto &pass : ObjectPasses_)
+    {
+      pass->OnSwapchainRecreated(ctx, swapchain, targets_);
+    }
+    if (shadow_pass_)
+    {
+      shadow_pass_->OnSwapchainRecreated(ctx, swapchain, targets_);
     }
   }
 
@@ -196,6 +238,34 @@ namespace vkfw
     frame.swapchain_image_view = swapchain.ImageView(image_index);
     frame.swapchain_old_layout = vk::ImageLayout::eColorAttachmentOptimal;
     frame.globals = &globals;
+    if (shadow_pass_)
+    {
+      shadow_pass_->Execute(frame, targets_, [&](vk::raii::CommandBuffer &shadow_cmd, vk::PipelineLayout shadow_layout)
+                             {
+                               auto &terrain_shadow_pipeline = shadow_pass_->GetTerrainShadowPipeline();
+                               auto &tree_shadow_pipeline = shadow_pass_->GetMeshShadowPipeline();
+           for (auto &obj_pass : ObjectPasses_)
+           {
+
+            auto terrainPtr = dynamic_cast<TerrainPass*>(obj_pass.get());
+            auto treePtr = dynamic_cast<MeshPass*>(obj_pass.get());
+            if(terrainPtr)
+            {
+              // --- 第一步：画地形的影子 ---
+              shadow_cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *terrain_shadow_pipeline);
+              // 这里调用地形的绘制逻辑
+              terrainPtr->JustDraw(shadow_cmd, shadow_layout, frame.image_index);
+            }
+            else if(treePtr)
+            {
+              // --- 第二步：画树木的影子 ---
+              shadow_cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *tree_shadow_pipeline);
+              // 这里调用树木的绘制逻辑
+              treePtr->JustDraw(shadow_cmd, shadow_layout, frame.image_index);
+             }
+         } });
+    }
+
     for (auto &pass : passes_)
     {
       pass->Record(frame, targets_);

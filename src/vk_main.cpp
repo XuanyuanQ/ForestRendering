@@ -148,6 +148,12 @@ private:
     // renderer_.AddPass(std::make_unique<vkfw::LightingPass>()); // draws the triangle for now
     renderer_.AddPass(std::make_unique<vkfw::TerrainPass>());
     renderer_.AddPass(std::make_unique<vkfw::ImGuiPass>());
+
+    renderer_.AddObjectPass(std::make_unique<vkfw::MeshPass>(modelPath));
+    renderer_.AddObjectPass(std::make_unique<vkfw::TerrainPass>());
+
+    renderer_.setShowDepthPass(std::make_unique<vkfw::ShadowPass>(2048));
+
     if (!renderer_.Create(ctx_, swapchain_, sync_, debugParameter_))
       throw std::runtime_error("vkfw::VkRenderer::Create failed");
   }
@@ -186,21 +192,13 @@ private:
       float t = std::chrono::duration<float>(now - start_time).count();
       last_time = now;
 
-      // Day/Night Cycle
+      // Light control:
+      // - animation=true  -> auto orbit (updates _sunTime)
+      // - animation=false -> manual sliders (Light X/Y/Z)
       if (debugParameter_.animation)
       {
-        float deltaTimeUs = (float)(dt / 1000000.0);
         _sunTime += dt * debugParameter_.daySpeed;
-      }
-      // Simulated solar orbit
-      float daySpeed = 0.5f;
-      float sunRadius = 100.0f; // Sun distance (For directional light, this value
-                                // only affects direction, not attenuation)
-      float x_factor = 2.0;
-      float y_factor = 4.0;
-
-      if (!debugParameter_.animation)
-      {
+        float const sunRadius = 100.0f;
         _lightPosition.x = sin(_sunTime) * sunRadius;
         _lightPosition.y = cos(_sunTime) * sunRadius;
         _lightPosition.z = -100.0f;
@@ -209,7 +207,6 @@ private:
       {
         _lightPosition = glm::vec3(debugParameter_.lightX, debugParameter_.lightY, debugParameter_.lightZ);
       }
-      auto light_world_to_clip_matrix = updateLightMatrix(_lightPosition);
 
       if (glfwGetKey(window_, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window_, GLFW_TRUE);
@@ -253,7 +250,8 @@ private:
         camera.pos -= glm::vec3{0, 1, 0} * speed;
 
       vkfw::FrameGlobals globals{};
-      light_world_to_clip_matrix;
+      // std::cout << "Light Position: " << _lightPosition.x << ", " << _lightPosition.y << ", " << _lightPosition.z << std::endl;
+      auto light_world_to_clip_matrix = updateLightMatrix(_lightPosition);
       globals.light = light_world_to_clip_matrix;
       globals.view = camera.View();
       globals.proj = camera.Proj(float(swapchain_.Extent().width) / float(swapchain_.Extent().height));
@@ -277,8 +275,10 @@ private:
     // float nearPlane = 1.0f;
     // float farPlane = 3000.0f;
     float nearPlane = 1.0f, farPlane = 1000.5f;
+    // Vulkan clip space: depth 0..1, and we flip Y like the camera projection.
     auto lightProjection =
-        glm::ortho(-boxSize, boxSize, -boxSize, boxSize, nearPlane, farPlane);
+        glm::orthoRH_ZO(-boxSize, boxSize, -boxSize, boxSize, nearPlane, farPlane);
+    lightProjection[1][1] *= -1.0f;
 
     glm::vec3 target = glm::vec3(0.0f, 0.0f, 0.0f); // center of forest
     glm::mat4 lightView =

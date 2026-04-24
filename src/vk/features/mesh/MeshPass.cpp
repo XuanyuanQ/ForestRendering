@@ -159,6 +159,8 @@ namespace vkfw
     // 3. 深度与贴图
     if (!targets.shared_depth.Valid())
       throw std::runtime_error("MeshPass requires RenderTargets::shared_depth");
+    if (!targets.shadow_map.Valid())
+      throw std::runtime_error("MeshPass requires RenderTargets::shadow_map");
     LoadTexture(ctx, "res/47-mapletree/maple_bark.png", 0);
 
     LoadTexture(ctx, "res/47-mapletree/maple_leaf.png", 1);
@@ -170,7 +172,7 @@ namespace vkfw
     ub_bind.binding = 0;
     ub_bind.descriptorType = vk::DescriptorType::eUniformBuffer;
     ub_bind.descriptorCount = 1;
-    ub_bind.stageFlags = vk::ShaderStageFlagBits::eVertex;
+    ub_bind.stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
 
     vk::DescriptorSetLayoutBinding smp_bind{};
     smp_bind.binding = 1;
@@ -178,9 +180,15 @@ namespace vkfw
     smp_bind.descriptorCount = 1;
     smp_bind.stageFlags = vk::ShaderStageFlagBits::eFragment;
 
-    std::array<vk::DescriptorSetLayoutBinding, 2> binds = {ub_bind, smp_bind};
+    vk::DescriptorSetLayoutBinding shadow_bind{};
+    shadow_bind.binding = 2;
+    shadow_bind.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+    shadow_bind.descriptorCount = 1;
+    shadow_bind.stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+    std::array<vk::DescriptorSetLayoutBinding, 3> binds = {ub_bind, smp_bind, shadow_bind};
     vk::DescriptorSetLayoutCreateInfo dsl_ci{};
-    dsl_ci.bindingCount = 2;
+    dsl_ci.bindingCount = static_cast<uint32_t>(binds.size());
     dsl_ci.pBindings = binds.data();
     dsl_ = vk::raii::DescriptorSetLayout{device, dsl_ci};
 
@@ -189,7 +197,8 @@ namespace vkfw
     uint32_t total_sets = image_count * 2;
     std::array<vk::DescriptorPoolSize, 2> ps{};
     ps[0] = {vk::DescriptorType::eUniformBuffer, total_sets};
-    ps[1] = {vk::DescriptorType::eCombinedImageSampler, total_sets};
+    // binding=1 (albedo) + binding=2 (shadow map)
+    ps[1] = {vk::DescriptorType::eCombinedImageSampler, total_sets * 2u};
 
     vk::DescriptorPoolCreateInfo dp_ci{};
     dp_ci.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
@@ -229,6 +238,7 @@ namespace vkfw
       {
         vk::DescriptorBufferInfo bi{*ubo_buf_[i], 0, sizeof(CameraUBO)};
         vk::DescriptorImageInfo ii{*common_sampler_, *textures_[m].view, vk::ImageLayout::eShaderReadOnlyOptimal};
+        vk::DescriptorImageInfo si{targets.shadow_map.sampler, targets.shadow_map.view, vk::ImageLayout::eShaderReadOnlyOptimal};
 
         vk::WriteDescriptorSet w_ubo{};
         w_ubo.dstSet = *ds_[i * 2 + m];
@@ -244,7 +254,14 @@ namespace vkfw
         w_smp.descriptorType = vk::DescriptorType::eCombinedImageSampler;
         w_smp.pImageInfo = &ii;
 
-        device.updateDescriptorSets({w_ubo, w_smp}, {});
+        vk::WriteDescriptorSet w_shadow{};
+        w_shadow.dstSet = *ds_[i * 2 + m];
+        w_shadow.dstBinding = 2;
+        w_shadow.descriptorCount = 1;
+        w_shadow.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        w_shadow.pImageInfo = &si;
+
+        device.updateDescriptorSets({w_ubo, w_smp, w_shadow}, {});
       }
     }
 
@@ -425,6 +442,7 @@ namespace vkfw
     ubo.light = frame.globals->light;
     ubo.model = model_matrix_;
     ubo.camera_pos = glm::vec4(frame.globals->camera_pos, 1.0f);
+    ubo.shadow_params = glm::vec4((debugParameter_ && debugParameter_->shadowmap) ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f);
 
     // 确保索引在范围内再拷贝
     if (img < ubo_map_.size() && ubo_map_[img])
@@ -472,6 +490,12 @@ namespace vkfw
     vk::Rect2D sc{{0, 0}, frame.swapchain_extent};
     cmd.setScissor(0, sc);
 
+    JustDraw(cmd, *pipeline_layout_, img);
+    cmd.endRendering();
+  }
+
+  void MeshPass::JustDraw(vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index)
+  {
     // cmd.bindVertexBuffers(0, *vb_, {0});
     std::vector<vk::Buffer> vertex_buffers = {*vb_, *instance_buf_};
     std::vector<vk::DeviceSize> offsets = {0, 0};
@@ -479,25 +503,26 @@ namespace vkfw
 
     cmd.bindIndexBuffer(*ib_, 0, vk::IndexType::eUint32);
 
+    bool const use_own_layout =
+        static_cast<VkPipelineLayout>(layout) == static_cast<VkPipelineLayout>(*pipeline_layout_);
+
     // --- 核心：分子网格（树干、树叶）绘制 ---
     for (const auto &sm : sub_meshes_)
     {
-      // 计算当前帧对应的描述符集索引 (img * 2 + 材质索引)
-      uint32_t ds_idx = img * 2 + sm.textureIndex;
-
-      if (ds_idx < ds_.size())
+      // 只有主渲染 pass 才绑定材质纹理等描述符；ShadowPass 会在外部绑定光源矩阵 UBO。
+      if (use_own_layout)
       {
-        vk::DescriptorSet set = *ds_[ds_idx];
-        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline_layout_, 0, {set}, {});
+        // 计算当前帧对应的描述符集索引 (img * 2 + 材质索引)
+        uint32_t ds_idx = image_index * 2 + sm.textureIndex;
+        if (ds_idx < ds_.size())
+        {
+          vk::DescriptorSet set = *ds_[ds_idx];
+          cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 0, {set}, {});
+        }
       }
-
-      // 绘制子网格，instanceCount 目前固定为 1
-      // cmd.drawIndexed(sm.indexCount, 1, sm.firstIndex, 0, 0);
 
       cmd.drawIndexed(sm.indexCount, instance_count_, sm.firstIndex, 0, 0);
     }
-
-    cmd.endRendering();
   }
 
 } // namespace vkfw

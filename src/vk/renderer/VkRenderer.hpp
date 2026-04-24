@@ -14,6 +14,7 @@ namespace vkfw
   class VkSwapchain;
   class VkFrameSync;
   class IRenderPass;
+  class ShadowPass;
 
   class VkRenderer
   {
@@ -23,7 +24,8 @@ namespace vkfw
 
     VkRenderer(VkRenderer const &) = delete;
     VkRenderer &operator=(VkRenderer const &) = delete;
-
+    void AddObjectPass(std::unique_ptr<IRenderPass> pass);
+    void setShowDepthPass(std::unique_ptr<ShadowPass> pass);
     void AddPass(std::unique_ptr<IRenderPass> pass);
 
     bool Create(VkContext &ctx, VkSwapchain &swapchain, VkFrameSync &sync, DebugParam &param);
@@ -44,6 +46,8 @@ namespace vkfw
     void SyncSharedDepthTargets() noexcept;
 
     std::vector<std::unique_ptr<IRenderPass>> passes_;
+    std::vector<std::unique_ptr<IRenderPass>> ObjectPasses_;
+    std::unique_ptr<ShadowPass> shadow_pass_;
     RenderTargets targets_{};
 
     vk::raii::CommandPool command_pool_{nullptr};

@@ -86,7 +86,7 @@ namespace vkfw
     ub_bind.binding = 0;
     ub_bind.descriptorType = vk::DescriptorType::eUniformBuffer;
     ub_bind.descriptorCount = 1;
-    ub_bind.stageFlags = vk::ShaderStageFlagBits::eVertex;
+    ub_bind.stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
 
     vk::DescriptorSetLayoutBinding smp_bind{};
     smp_bind.binding = 1;
@@ -94,18 +94,26 @@ namespace vkfw
     smp_bind.descriptorCount = 1;
     smp_bind.stageFlags = vk::ShaderStageFlagBits::eFragment;
 
-    std::array<vk::DescriptorSetLayoutBinding, 2> binds = {ub_bind, smp_bind};
+    vk::DescriptorSetLayoutBinding shadow_bind{};
+    shadow_bind.binding = 2;
+    shadow_bind.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+    shadow_bind.descriptorCount = 1;
+    shadow_bind.stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+    std::array<vk::DescriptorSetLayoutBinding, 3> binds = {ub_bind, smp_bind, shadow_bind};
     vk::DescriptorSetLayoutCreateInfo dsl_ci{};
-    dsl_ci.bindingCount = 2;
+    dsl_ci.bindingCount = static_cast<uint32_t>(binds.size());
     dsl_ci.pBindings = binds.data();
     return vk::raii::DescriptorSetLayout{device, dsl_ci};
   }
+
   vk::raii::DescriptorPool TerrainPass::CreateDescriptorPool(const vk::raii::Device &device, const int image_count)
   {
     uint32_t total_sets = image_count;
     std::array<vk::DescriptorPoolSize, 2> ps{};
     ps[0] = {vk::DescriptorType::eUniformBuffer, total_sets};
-    ps[1] = {vk::DescriptorType::eCombinedImageSampler, total_sets};
+    // binding=1 (albedo) + binding=2 (shadow map)
+    ps[1] = {vk::DescriptorType::eCombinedImageSampler, total_sets * 2u};
 
     vk::DescriptorPoolCreateInfo dp_ci{};
     dp_ci.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
@@ -156,31 +164,43 @@ namespace vkfw
     }
   }
 
-  void TerrainPass::UpdateDescriptorSets(const vk::raii::Device &device, uint32_t image_count)
+  void TerrainPass::UpdateDescriptorSets(const vk::raii::Device &device, uint32_t image_count, RenderTargets const &targets)
   {
+    if (!targets.shadow_map.Valid())
+      throw std::runtime_error("TerrainPass requires RenderTargets::shadow_map");
+
     for (uint32_t i = 0; i < image_count; ++i)
     {
 
       for (uint32_t m = 0; m < textures_.size(); ++m)
       {
+        uint32_t const set_idx = i * static_cast<uint32_t>(textures_.size()) + m;
         vk::DescriptorBufferInfo bi{*ubo_buf_[i], 0, sizeof(CameraUBO)};
         vk::DescriptorImageInfo ii{*common_sampler_, *textures_[m].view, vk::ImageLayout::eShaderReadOnlyOptimal};
+        vk::DescriptorImageInfo si{targets.shadow_map.sampler, targets.shadow_map.view, vk::ImageLayout::eShaderReadOnlyOptimal};
 
         vk::WriteDescriptorSet w_ubo{};
-        w_ubo.dstSet = *ds_[i];
+        w_ubo.dstSet = *ds_[set_idx];
         w_ubo.dstBinding = 0;
         w_ubo.descriptorCount = 1;
         w_ubo.descriptorType = vk::DescriptorType::eUniformBuffer;
         w_ubo.pBufferInfo = &bi;
 
         vk::WriteDescriptorSet w_smp{};
-        w_smp.dstSet = *ds_[i];
+        w_smp.dstSet = *ds_[set_idx];
         w_smp.dstBinding = 1;
         w_smp.descriptorCount = 1;
         w_smp.descriptorType = vk::DescriptorType::eCombinedImageSampler;
         w_smp.pImageInfo = &ii;
 
-        device.updateDescriptorSets({w_ubo, w_smp}, {});
+        vk::WriteDescriptorSet w_shadow{};
+        w_shadow.dstSet = *ds_[set_idx];
+        w_shadow.dstBinding = 2;
+        w_shadow.descriptorCount = 1;
+        w_shadow.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        w_shadow.pImageInfo = &si;
+
+        device.updateDescriptorSets({w_ubo, w_smp, w_shadow}, {});
       }
     }
   }
@@ -210,11 +230,17 @@ namespace vkfw
     stages[1].module = *shader_module;
     stages[1].pName = "fragMain";
 
-    // 3. 顶点输入 (Vertex Input)
-    auto binding = VertexBindingDescriptions();
-    auto attrs = VertexAttributeDescriptions();
+    // 3. 顶点输入 (Vertex Input) - terrain is not instanced here
+    std::array<vk::VertexInputBindingDescription, 1> binding = {
+        vk::VertexInputBindingDescription{0u, sizeof(Vertex), vk::VertexInputRate::eVertex},
+    };
+    std::array<vk::VertexInputAttributeDescription, 3> attrs = {
+        vk::VertexInputAttributeDescription{0u, 0u, vk::Format::eR32G32B32Sfloat, static_cast<uint32_t>(offsetof(Vertex, pos))},
+        vk::VertexInputAttributeDescription{1u, 0u, vk::Format::eR32G32B32Sfloat, static_cast<uint32_t>(offsetof(Vertex, normal))},
+        vk::VertexInputAttributeDescription{2u, 0u, vk::Format::eR32G32Sfloat, static_cast<uint32_t>(offsetof(Vertex, uv))},
+    };
     vk::PipelineVertexInputStateCreateInfo vi{};
-    vi.vertexBindingDescriptionCount = 1;
+    vi.vertexBindingDescriptionCount = static_cast<uint32_t>(binding.size());
     vi.pVertexBindingDescriptions = binding.data();
     vi.vertexAttributeDescriptionCount = static_cast<uint32_t>(attrs.size());
     vi.pVertexAttributeDescriptions = attrs.data();
@@ -374,7 +400,7 @@ namespace vkfw
       ds_ai.pSetLayouts = layouts.data();
       ds_ = device.allocateDescriptorSets(ds_ai);
       CreateUniformBuffers(ctx, mem_props, image_count);
-      UpdateDescriptorSets(device, image_count);
+      UpdateDescriptorSets(device, image_count, targets);
     }
 
     CreatePipeline(device, "res/vk/terrain.spv", swapchain.Format(), targets.shared_depth.format);
@@ -429,6 +455,7 @@ namespace vkfw
     ubo.light = frame.globals->light;
     ubo.model = glm::mat4(1.0f);
     ubo.camera_pos = glm::vec4(frame.globals->camera_pos, 1.0f);
+    ubo.shadow_params = glm::vec4((debugParameter_ && debugParameter_->shadowmap) ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f);
 
     // 确保索引在范围内再拷贝
     if (img < ubo_map_.size() && ubo_map_[img])
@@ -469,31 +496,36 @@ namespace vkfw
     cmd.setViewport(0, vk::Viewport{0.0f, 0.0f, static_cast<float>(frame.swapchain_extent.width),
                                     static_cast<float>(frame.swapchain_extent.height), 0.0f, 1.0f});
     cmd.setScissor(0, vk::Rect2D{vk::Offset2D{0, 0}, frame.swapchain_extent});
+    JustDraw(cmd, *pipeline_layout_, img);
+    cmd.endRendering();
+
+    // 注意：这里删除了 TransitionImage 到 PresentSrcKHR 的代码！
+    // 应该在所有 Pass 执行完后由 App 统一执行
+  }
+
+  void TerrainPass::JustDraw(vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index)
+  {
+    // 1. 绑定顶点和索引 (阴影和主场景都需要)
     cmd.bindIndexBuffer(*index_buffer_, 0, vk::IndexType::eUint32);
     cmd.bindVertexBuffers(0, *vertex_buffer_, {0});
 
-    if (img < ds_.size())
+    // 2. 绑定描述符集
+    // 只有当外部传入的 layout 与本 pass 的 pipeline_layout_ 一致时，才绑定本 pass 的描述符集。
+    // ShadowPass 会在外部绑定它自己的光源矩阵 UBO 描述符集，避免 layout/DSL 不匹配导致崩溃。
+    bool const use_own_layout =
+        static_cast<VkPipelineLayout>(layout) == static_cast<VkPipelineLayout>(*pipeline_layout_);
+    if (use_own_layout && image_index < ds_.size())
     {
       cmd.bindDescriptorSets(
           vk::PipelineBindPoint::eGraphics,
-          *pipeline_layout_,
-          0,           // 第一个 Set 的索引
-          {*ds_[img]}, // 绑定当前帧对应的 Descriptor Set
-          {}           // 动态偏移量（如果没有则为空）
-      );
+          layout, // 使用传入的 layout
+          0,
+          {*ds_[image_index]},
+          {});
     }
 
+    // 3. 执行绘制
     cmd.drawIndexed(static_cast<uint32_t>(terrtain_.indices.size()), 1, 0, 0, 0);
-    cmd.endRendering();
-
-    // Transition to present.
-    TransitionImage(cmd, frame.swapchain_image, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR,
-                    vk::ImageAspectFlagBits::eColor, vk::AccessFlagBits2::eColorAttachmentWrite, {},
-                    vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::PipelineStageFlagBits2::eBottomOfPipe);
-  }
-
-  void TerrainPass::updateVertexBuffer()
-  {
   }
 
 } // namespace vkfw

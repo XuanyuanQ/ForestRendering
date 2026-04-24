@@ -5,6 +5,7 @@ struct CameraData {
     column_major float4x4 unused_model;
     column_major float4x4 light;
     float4 cameraPos;
+    float4 shadowParams; // x: apply shadow (0/1)
 };
 
 // 2. 绑定资源
@@ -23,6 +24,7 @@ struct VertexOutput {
     float4 sv_position : SV_Position;
     [[vk::location(0)]] float3 normal;
     [[vk::location(1)]] float2 uv;
+    [[vk::location(2)]] float4 light_clip;
 };
 
 [shader("vertex")]
@@ -32,6 +34,7 @@ VertexOutput main(VertexInput input) {
     float4 worldPos = mul(input.instanceModel, float4(input.pos, 1.0));
     // 变换到裁剪空间
     output.sv_position = mul(ubo.proj, mul(ubo.view, worldPos));
+    output.light_clip = mul(ubo.light, worldPos);
     //output.sv_position = float4(input.pos, 1.0);
     output.normal = mul((float3x3)input.instanceModel, input.normal);
     output.uv = input.uv;

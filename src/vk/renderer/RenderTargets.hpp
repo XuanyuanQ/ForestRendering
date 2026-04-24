@@ -26,6 +26,25 @@ namespace vkfw
 
     DepthTarget shared_depth{};
 
+    struct ShadowMapTarget
+    {
+      vk::Format format{vk::Format::eUndefined};
+      vk::Extent2D extent{};
+      vk::Image image{};
+      vk::ImageView view{};
+      vk::Sampler sampler{};
+      vk::ImageLayout layout{vk::ImageLayout::eUndefined};
+
+      bool Valid() const noexcept
+      {
+        return static_cast<VkImage>(image) != VK_NULL_HANDLE &&
+               static_cast<VkImageView>(view) != VK_NULL_HANDLE &&
+               static_cast<VkSampler>(sampler) != VK_NULL_HANDLE;
+      }
+    };
+
+    ShadowMapTarget shadow_map{};
+
     bool has_shadow = false;
     bool has_gbuffer = false;
     bool has_ssao = false;
