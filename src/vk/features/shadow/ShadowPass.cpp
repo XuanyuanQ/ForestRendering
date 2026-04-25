@@ -69,6 +69,11 @@ namespace vkfw
       ubo.model = glm::mat4(1.0f);
       ubo.light = frame.globals->light;
       ubo.camera_pos = glm::vec4(frame.globals->camera_pos, 1.0f);
+
+      glm::vec3 const light_pos = frame.globals->light_position;
+      float const len2 = glm::dot(light_pos, light_pos);
+      glm::vec3 const dir_to_light = (len2 > 1e-6f) ? glm::normalize(light_pos) : glm::vec3(0.0f, 1.0f, 0.0f);
+      ubo.light_dir = glm::vec4(dir_to_light, 0.0f);
       std::memcpy(ubo_map_[img], &ubo, sizeof(ubo));
     }
 
@@ -168,6 +173,8 @@ namespace vkfw
       binding.push_back(vk::VertexInputBindingDescription{1u, sizeof(InstanceData), vk::VertexInputRate::eInstance});
 
       attrs.push_back({0u, 0u, vk::Format::eR32G32B32Sfloat, static_cast<uint32_t>(offsetof(Vertex, pos))});
+      // Needed for alpha discard sampling in shadow fragment shader (leaves).
+      attrs.push_back({2u, 0u, vk::Format::eR32G32Sfloat, static_cast<uint32_t>(offsetof(Vertex, uv))});
       for (uint32_t i = 0; i < 4; ++i)
       {
         attrs.push_back({3u + i,
@@ -180,6 +187,8 @@ namespace vkfw
     {
       binding.push_back(vk::VertexInputBindingDescription{0u, sizeof(Vertex), vk::VertexInputRate::eVertex});
       attrs.push_back({0u, 0u, vk::Format::eR32G32B32Sfloat, static_cast<uint32_t>(offsetof(Vertex, pos))});
+      // Provide UV so optional alpha discard works for non-instanced shadow draws too.
+      attrs.push_back({2u, 0u, vk::Format::eR32G32Sfloat, static_cast<uint32_t>(offsetof(Vertex, uv))});
     }
     vk::PipelineVertexInputStateCreateInfo vi{};
     vi.vertexBindingDescriptionCount = static_cast<uint32_t>(binding.size());
@@ -313,9 +322,9 @@ namespace vkfw
     sci.magFilter = vk::Filter::eLinear;
     sci.minFilter = vk::Filter::eLinear;
     sci.mipmapMode = vk::SamplerMipmapMode::eLinear;
-    sci.addressModeU = vk::SamplerAddressMode::eClampToEdge; // 边缘外不产生阴影
-    sci.addressModeV = vk::SamplerAddressMode::eClampToEdge;
-    sci.addressModeW = vk::SamplerAddressMode::eClampToEdge;
+    sci.addressModeU = vk::SamplerAddressMode::eClampToBorder; // 超出光源投影范围 -> 视作不在阴影中
+    sci.addressModeV = vk::SamplerAddressMode::eClampToBorder;
+    sci.addressModeW = vk::SamplerAddressMode::eClampToBorder;
     sci.mipLodBias = 0.0f;
     sci.maxAnisotropy = 1.0f;
     sci.minLod = 0.0f;

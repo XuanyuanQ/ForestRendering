@@ -385,6 +385,11 @@ namespace vkfw
     ubo.camera_pos = glm::vec4(frame.globals->camera_pos, 1.0f);
     ubo.shadow_params = glm::vec4((debugParameter_ && debugParameter_->shadowmap) ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f);
 
+    glm::vec3 const light_pos = frame.globals->light_position;
+    float const len2 = glm::dot(light_pos, light_pos);
+    glm::vec3 const dir_to_light = (len2 > 1e-6f) ? glm::normalize(light_pos) : glm::vec3(0.0f, 1.0f, 0.0f);
+    ubo.light_dir = glm::vec4(dir_to_light, 0.0f);
+
     // 确保索引在范围内再拷贝
     if (img < ubo_map_.size() && ubo_map_[img])
     {

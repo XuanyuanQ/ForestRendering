@@ -42,6 +42,6 @@ VertexOutput vertMain(VertexInput input) {
 void fragMain(VertexOutput input)
 {
     float a = alphaTex.Sample(input.uv).a;
-    // if (a < 0.1)
-    //     discard;
+    if (a < 0.1)
+        discard;
 }

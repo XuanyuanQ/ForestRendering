@@ -6,6 +6,7 @@ struct CameraData {
     column_major float4x4 light;
     float4 cameraPos;
     float4 shadowParams; // x: apply shadow (0/1)
+    float4 lightDir;     // xyz: world-space direction to light
 };
 
 // 2. 绑定资源

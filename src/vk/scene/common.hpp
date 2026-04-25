@@ -27,6 +27,7 @@ namespace vkfw
         glm::mat4 light{1.0f};
         glm::vec4 camera_pos{0.0f};
         glm::vec4 shadow_params{1.0f, 0.0f, 0.0f, 0.0f}; // x: apply shadow (0/1)
+        glm::vec4 light_dir{0.0f, 1.0f, 0.0f, 0.0f};     // xyz: world-space direction to light (directional)
     };
 
     struct DebugParam

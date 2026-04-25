@@ -256,7 +256,7 @@ private:
       globals.view = camera.View();
       globals.proj = camera.Proj(float(swapchain_.Extent().width) / float(swapchain_.Extent().height));
       globals.camera_pos = camera.pos;
-      globals.light_position = glm::vec3{std::cos(t * 0.2f), std::sin(t * 0.2f), 0.2f};
+      globals.light_position = _lightPosition;
       globals.time_seconds = t;
       globals.delta_seconds = dt;
 
