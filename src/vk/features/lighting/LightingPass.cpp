@@ -4,6 +4,7 @@
 #include "vk/core/VkSwapchain.hpp"
 #include "vk/renderer/FrameContext.hpp"
 #include "vk/renderer/RenderTargets.hpp"
+#include "vk/scene/Vertex.hpp"
 #include <imgui.h>
 #include <imgui_impl_vulkan.h>
 #include <array>
@@ -17,23 +18,6 @@
 
 namespace vkfw
 {
-  namespace
-  {
-
-    static vk::VertexInputBindingDescription BindingDesc()
-    {
-      return vk::VertexInputBindingDescription{0u, sizeof(VertexTest), vk::VertexInputRate::eVertex};
-    }
-
-    static std::array<vk::VertexInputAttributeDescription, 2> AttrDescs()
-    {
-      return {
-          vk::VertexInputAttributeDescription{0u, 0u, vk::Format::eR32G32Sfloat, offsetof(VertexTest, pos)},
-          vk::VertexInputAttributeDescription{1u, 0u, vk::Format::eR32G32B32Sfloat, offsetof(VertexTest, color)},
-      };
-    }
-
-  } // namespace
 
   bool LightingPass::Create(VkContext &ctx, VkSwapchain const &swapchain, RenderTargets &)
   {
@@ -54,11 +38,11 @@ namespace vkfw
     stages[1].module = *shader_module;
     stages[1].pName = "fragMain";
 
-    auto binding = BindingDesc();
-    auto attrs = AttrDescs();
+    auto binding = VertexBindingDescriptions();
+    auto attrs = VertexAttributeDescriptions();
     vk::PipelineVertexInputStateCreateInfo vi{};
     vi.vertexBindingDescriptionCount = 1;
-    vi.pVertexBindingDescriptions = &binding;
+    vi.pVertexBindingDescriptions = binding.data();
     vi.vertexAttributeDescriptionCount = static_cast<uint32_t>(attrs.size());
     vi.pVertexAttributeDescriptions = attrs.data();
 

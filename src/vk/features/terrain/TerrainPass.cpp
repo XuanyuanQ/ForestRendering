@@ -115,14 +115,8 @@ namespace vkfw
     stages[1].pName = "fragMain";
 
     // 3. 顶点输入 (Vertex Input) - terrain is not instanced here
-    std::array<vk::VertexInputBindingDescription, 1> binding = {
-        vk::VertexInputBindingDescription{0u, sizeof(Vertex), vk::VertexInputRate::eVertex},
-    };
-    std::array<vk::VertexInputAttributeDescription, 3> attrs = {
-        vk::VertexInputAttributeDescription{0u, 0u, vk::Format::eR32G32B32Sfloat, static_cast<uint32_t>(offsetof(Vertex, pos))},
-        vk::VertexInputAttributeDescription{1u, 0u, vk::Format::eR32G32B32Sfloat, static_cast<uint32_t>(offsetof(Vertex, normal))},
-        vk::VertexInputAttributeDescription{2u, 0u, vk::Format::eR32G32Sfloat, static_cast<uint32_t>(offsetof(Vertex, uv))},
-    };
+    auto binding = VertexBindingDescriptions();
+    auto attrs = VertexAttributeDescriptions();
     vk::PipelineVertexInputStateCreateInfo vi{};
     vi.vertexBindingDescriptionCount = static_cast<uint32_t>(binding.size());
     vi.pVertexBindingDescriptions = binding.data();

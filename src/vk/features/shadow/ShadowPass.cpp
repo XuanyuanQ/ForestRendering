@@ -164,32 +164,8 @@ namespace vkfw
     stages[1].pName = frag_entry;
 
     // 顶点输入：和 Terrain 一模一样，这样可以复用同一个 VBO
-    std::vector<vk::VertexInputBindingDescription> binding{};
-    std::vector<vk::VertexInputAttributeDescription> attrs{};
-    if (instanced)
-    {
-      // Shadow depth pass only needs position + instance model matrix.
-      binding.push_back(vk::VertexInputBindingDescription{0u, sizeof(Vertex), vk::VertexInputRate::eVertex});
-      binding.push_back(vk::VertexInputBindingDescription{1u, sizeof(InstanceData), vk::VertexInputRate::eInstance});
-
-      attrs.push_back({0u, 0u, vk::Format::eR32G32B32Sfloat, static_cast<uint32_t>(offsetof(Vertex, pos))});
-      // Needed for alpha discard sampling in shadow fragment shader (leaves).
-      attrs.push_back({2u, 0u, vk::Format::eR32G32Sfloat, static_cast<uint32_t>(offsetof(Vertex, uv))});
-      for (uint32_t i = 0; i < 4; ++i)
-      {
-        attrs.push_back({3u + i,
-                         1u,
-                         vk::Format::eR32G32B32A32Sfloat,
-                         static_cast<uint32_t>(offsetof(InstanceData, model) + sizeof(glm::vec4) * i)});
-      }
-    }
-    else
-    {
-      binding.push_back(vk::VertexInputBindingDescription{0u, sizeof(Vertex), vk::VertexInputRate::eVertex});
-      attrs.push_back({0u, 0u, vk::Format::eR32G32B32Sfloat, static_cast<uint32_t>(offsetof(Vertex, pos))});
-      // Provide UV so optional alpha discard works for non-instanced shadow draws too.
-      attrs.push_back({2u, 0u, vk::Format::eR32G32Sfloat, static_cast<uint32_t>(offsetof(Vertex, uv))});
-    }
+    auto binding = VertexBindingDescriptions();
+    auto attrs = VertexAttributeDescriptions();
     vk::PipelineVertexInputStateCreateInfo vi{};
     vi.vertexBindingDescriptionCount = static_cast<uint32_t>(binding.size());
     vi.pVertexBindingDescriptions = binding.data();

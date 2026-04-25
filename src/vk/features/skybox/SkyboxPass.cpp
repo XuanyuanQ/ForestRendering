@@ -5,6 +5,7 @@
 #include "vk/renderer/FrameContext.hpp"
 #include "vk/renderer/FrameGlobals.hpp"
 #include "vk/renderer/helper.hpp"
+#include "vk/scene/Vertex.hpp"
 
 #include <array>
 #include <cassert>
@@ -170,7 +171,7 @@ namespace vkfw
     vk::MemoryAllocateInfo vb_mai{};
     vb_mai.allocationSize = req.size;
     vb_mai.memoryTypeIndex = FindMemoryType(ctx.PhysicalDevice(), req.memoryTypeBits,
-                                           vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+                                            vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
     vertex_memory_ = vk::raii::DeviceMemory{device, vb_mai};
     vertex_buffer_.bindMemory(*vertex_memory_, 0);
 
