@@ -47,12 +47,36 @@ namespace
 	{
 		WindowManager::WindowDatum* const instance = static_cast<WindowManager::WindowDatum*>(glfwGetWindowUserPointer(window));
 		instance->input_handler.FeedMouseButtons(button, action);
+
+		ImGui_ImplGlfw_MouseButtonCallback(window, button, action, mods);
 	}
 
 	void CursorCallback(GLFWwindow* window, double x, double y)
 	{
 		WindowManager::WindowDatum* const instance = static_cast<WindowManager::WindowDatum*>(glfwGetWindowUserPointer(window));
 		instance->input_handler.FeedMouseMotion(glm::vec2(x, y));
+
+		ImGui_ImplGlfw_CursorPosCallback(window, x, y);
+	}
+
+	void ScrollCallback(GLFWwindow* window, double xoffset, double yoffset)
+	{
+		ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
+	}
+
+	void CharCallback(GLFWwindow* window, unsigned int c)
+	{
+		ImGui_ImplGlfw_CharCallback(window, c);
+	}
+
+	void WindowFocusCallback(GLFWwindow* window, int focused)
+	{
+		ImGui_ImplGlfw_WindowFocusCallback(window, focused);
+	}
+
+	void CursorEnterCallback(GLFWwindow* window, int entered)
+	{
+		ImGui_ImplGlfw_CursorEnterCallback(window, entered);
 	}
 
 	void FramebufferSizeCallback(GLFWwindow* window, int width, int height)
@@ -137,7 +161,8 @@ GLFWwindow* WindowManager::CreateGLFWWindow(std::string const& title, WindowDatu
 	ImGui::StyleColorsDark();
 
 	// Setup Platform/Renderer bindings
-	ImGui_ImplGlfw_InitForOpenGL(window, true);
+	// We install our own GLFW callbacks and explicitly forward them to imgui.
+	ImGui_ImplGlfw_InitForOpenGL(window, false);
 	char glsl_version_directive[13];
 	std::snprintf(glsl_version_directive, 13, "#version %d%d0", default_opengl_major_version, default_opengl_minor_version);
 	ImGui_ImplOpenGL3_Init(glsl_version_directive);
@@ -146,11 +171,13 @@ GLFWwindow* WindowManager::CreateGLFWWindow(std::string const& title, WindowDatu
 	glfwSetInputMode(window, GLFW_STICKY_KEYS, 1);
 	glfwSetMouseButtonCallback(window, MouseCallback);
 	glfwSetCursorPosCallback(window, CursorCallback);
+	glfwSetCursorEnterCallback(window, CursorEnterCallback);
+	glfwSetWindowFocusCallback(window, WindowFocusCallback);
 	glfwSetFramebufferSizeCallback(window, FramebufferSizeCallback);
 	glfwSetWindowUserPointer(window, static_cast<void*>(this));
 
-	glfwSetScrollCallback(window, ImGui_ImplGlfw_ScrollCallback);
-	glfwSetCharCallback(window, ImGui_ImplGlfw_CharCallback);
+	glfwSetScrollCallback(window, ScrollCallback);
+	glfwSetCharCallback(window, CharCallback);
 
 	GLint context_flags = 0, profile_mask = 0;
 	glGetIntegerv(GL_CONTEXT_FLAGS, &context_flags);
