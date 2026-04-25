@@ -85,40 +85,8 @@ namespace vkfw
       const vk::PhysicalDeviceMemoryProperties &mem_props,
       uint32_t image_count)
   {
-    // 预留空间，防止 vector 频繁扩容（提高效率）
-    ubo_buf_.reserve(image_count);
-    ubo_mem_.reserve(image_count);
-    ubo_map_.resize(image_count, nullptr); // 假设 ubo_map_ 是 std::vector<void*>
-
-    for (uint32_t i = 0; i < image_count; ++i)
-    {
-      // 1. 创建 Buffer 对象
-      vk::BufferCreateInfo u_ci{};
-      u_ci.size = sizeof(CameraUBO);
-      u_ci.usage = vk::BufferUsageFlagBits::eUniformBuffer;
-      ubo_buf_.emplace_back(ctx.Device(), u_ci);
-
-      // 2. 获取内存需求并分配内存
-      auto req = ubo_buf_.back().getMemoryRequirements();
-      vk::MemoryAllocateInfo u_mai{};
-      u_mai.allocationSize = req.size;
-
-      // 查找支持 CPU 写入 (HostVisible) 且 自动刷新缓存 (HostCoherent) 的内存
-      u_mai.memoryTypeIndex = FindMemoryType(
-          ctx.PhysicalDevice(),
-          req.memoryTypeBits,
-          vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-
-      // 创建 DeviceMemory 并推入容器
-      ubo_mem_.emplace_back(ctx.Device(), u_mai);
-
-      // 3. 绑定内存到 Buffer
-      ubo_buf_.back().bindMemory(*ubo_mem_.back(), 0);
-
-      // 4. 执行持久化映射 (Persistent Mapping)
-      // 映射后指针存入 ubo_map_，之后每帧更新数据只需 memcpy，无需重复 map/unmap
-      ubo_map_[i] = ubo_mem_.back().mapMemory(0, sizeof(CameraUBO));
-    }
+    (void)mem_props;
+    CreateMappedBuffers(ctx.Device(), ctx.PhysicalDevice(), image_count, sizeof(CameraUBO), vk::BufferUsageFlagBits::eUniformBuffer, ubo_buf_, ubo_mem_, ubo_map_);
   }
 
   void TerrainPass::CreatePipeline(
@@ -310,105 +278,27 @@ namespace vkfw
     uint32_t const material_count = static_cast<uint32_t>(textures_.size());
 
     // Descriptor set layouts (set=0 UBO, set=1 material, set=2 shadow map)
-    {
-      vk::DescriptorSetLayoutBinding ubo_bind{};
-      ubo_bind.binding = 0;
-      ubo_bind.descriptorType = vk::DescriptorType::eUniformBuffer;
-      ubo_bind.descriptorCount = 1;
-      ubo_bind.stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
-      vk::DescriptorSetLayoutCreateInfo ci{};
-      ci.bindingCount = 1;
-      ci.pBindings = &ubo_bind;
-      ubo_dsl_ = vk::raii::DescriptorSetLayout{device, ci};
-    }
-
-    {
-      vk::DescriptorSetLayoutBinding mat_bind{};
-      mat_bind.binding = 0;
-      mat_bind.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-      mat_bind.descriptorCount = 1;
-      mat_bind.stageFlags = vk::ShaderStageFlagBits::eFragment;
-      vk::DescriptorSetLayoutCreateInfo ci{};
-      ci.bindingCount = 1;
-      ci.pBindings = &mat_bind;
-      material_dsl_ = vk::raii::DescriptorSetLayout{device, ci};
-    }
-
-    {
-      vk::DescriptorSetLayoutBinding sh_bind{};
-      sh_bind.binding = 0;
-      sh_bind.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-      sh_bind.descriptorCount = 1;
-      sh_bind.stageFlags = vk::ShaderStageFlagBits::eFragment;
-      vk::DescriptorSetLayoutCreateInfo ci{};
-      ci.bindingCount = 1;
-      ci.pBindings = &sh_bind;
-      shadow_dsl_ = vk::raii::DescriptorSetLayout{device, ci};
-    }
+    ubo_dsl_ = CreateSingleBindingDescriptorSetLayout(device, 0, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment);
+    material_dsl_ = CreateSingleBindingDescriptorSetLayout(device, 0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment);
+    shadow_dsl_ = CreateSingleBindingDescriptorSetLayout(device, 0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment);
 
     // Pools + allocate sets
-    {
-      vk::DescriptorPoolSize ps{vk::DescriptorType::eUniformBuffer, image_count};
-      vk::DescriptorPoolCreateInfo dp_ci{};
-      dp_ci.maxSets = image_count;
-      dp_ci.poolSizeCount = 1;
-      dp_ci.pPoolSizes = &ps;
-      ubo_dp_ = vk::raii::DescriptorPool{device, dp_ci};
+    ubo_dp_ = CreateSingleTypeDescriptorPool(device, vk::DescriptorType::eUniformBuffer, image_count, image_count);
+    ubo_ds_ = AllocateDescriptorSets(device, ubo_dp_, ubo_dsl_, image_count);
 
-      std::vector<vk::DescriptorSetLayout> layouts(image_count, *ubo_dsl_);
-      vk::DescriptorSetAllocateInfo ai{};
-      ai.descriptorPool = *ubo_dp_;
-      ai.descriptorSetCount = image_count;
-      ai.pSetLayouts = layouts.data();
-      ubo_ds_ = device.allocateDescriptorSets(ai);
-    }
+    uint32_t const set_count = image_count * material_count;
+    material_dp_ = CreateSingleTypeDescriptorPool(device, vk::DescriptorType::eCombinedImageSampler, set_count, set_count);
+    material_ds_ = AllocateDescriptorSets(device, material_dp_, material_dsl_, set_count);
 
-    {
-      uint32_t const set_count = image_count * material_count;
-      vk::DescriptorPoolSize ps{vk::DescriptorType::eCombinedImageSampler, set_count};
-      vk::DescriptorPoolCreateInfo dp_ci{};
-      dp_ci.maxSets = set_count;
-      dp_ci.poolSizeCount = 1;
-      dp_ci.pPoolSizes = &ps;
-      material_dp_ = vk::raii::DescriptorPool{device, dp_ci};
-
-      std::vector<vk::DescriptorSetLayout> layouts(set_count, *material_dsl_);
-      vk::DescriptorSetAllocateInfo ai{};
-      ai.descriptorPool = *material_dp_;
-      ai.descriptorSetCount = set_count;
-      ai.pSetLayouts = layouts.data();
-      material_ds_ = device.allocateDescriptorSets(ai);
-    }
-
-    {
-      vk::DescriptorPoolSize ps{vk::DescriptorType::eCombinedImageSampler, image_count};
-      vk::DescriptorPoolCreateInfo dp_ci{};
-      dp_ci.maxSets = image_count;
-      dp_ci.poolSizeCount = 1;
-      dp_ci.pPoolSizes = &ps;
-      shadow_dp_ = vk::raii::DescriptorPool{device, dp_ci};
-
-      std::vector<vk::DescriptorSetLayout> layouts(image_count, *shadow_dsl_);
-      vk::DescriptorSetAllocateInfo ai{};
-      ai.descriptorPool = *shadow_dp_;
-      ai.descriptorSetCount = image_count;
-      ai.pSetLayouts = layouts.data();
-      shadow_ds_ = device.allocateDescriptorSets(ai);
-    }
+    shadow_dp_ = CreateSingleTypeDescriptorPool(device, vk::DescriptorType::eCombinedImageSampler, image_count, image_count);
+    shadow_ds_ = AllocateDescriptorSets(device, shadow_dp_, shadow_dsl_, image_count);
 
     CreateUniformBuffers(ctx, mem_props, image_count);
 
     // Update UBO sets
     for (uint32_t i = 0; i < image_count; ++i)
     {
-      vk::DescriptorBufferInfo bi{*ubo_buf_[i], 0, sizeof(CameraUBO)};
-      vk::WriteDescriptorSet w{};
-      w.dstSet = *ubo_ds_[i];
-      w.dstBinding = 0;
-      w.descriptorCount = 1;
-      w.descriptorType = vk::DescriptorType::eUniformBuffer;
-      w.pBufferInfo = &bi;
-      device.updateDescriptorSets({w}, {});
+      WriteUniformBufferDescriptor(device, *ubo_ds_[i], 0, *ubo_buf_[i], sizeof(CameraUBO));
     }
 
     // Update material sets
@@ -417,28 +307,14 @@ namespace vkfw
       for (uint32_t m = 0; m < material_count; ++m)
       {
         uint32_t const idx = i * material_count + m;
-        vk::DescriptorImageInfo ii{*common_sampler_, *textures_[m].view, vk::ImageLayout::eShaderReadOnlyOptimal};
-        vk::WriteDescriptorSet w{};
-        w.dstSet = *material_ds_[idx];
-        w.dstBinding = 0;
-        w.descriptorCount = 1;
-        w.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        w.pImageInfo = &ii;
-        device.updateDescriptorSets({w}, {});
+        WriteCombinedImageSamplerDescriptor(device, *material_ds_[idx], 0, *common_sampler_, *textures_[m].view);
       }
     }
 
     // Update shadow map sets
     for (uint32_t i = 0; i < image_count; ++i)
     {
-      vk::DescriptorImageInfo si{targets.shadow_map.sampler, targets.shadow_map.view, vk::ImageLayout::eShaderReadOnlyOptimal};
-      vk::WriteDescriptorSet w{};
-      w.dstSet = *shadow_ds_[i];
-      w.dstBinding = 0;
-      w.descriptorCount = 1;
-      w.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-      w.pImageInfo = &si;
-      device.updateDescriptorSets({w}, {});
+      WriteCombinedImageSamplerDescriptor(device, *shadow_ds_[i], 0, targets.shadow_map.sampler, targets.shadow_map.view);
     }
 
     CreatePipeline(device, "res/vk/terrain.spv", swapchain.Format(), targets.shared_depth.format);
@@ -467,16 +343,7 @@ namespace vkfw
     vertex_buffer_ = nullptr;
     vertex_memory_ = nullptr;
 
-    for (size_t i = 0; i < ubo_map_.size(); ++i)
-    {
-      if (i < ubo_mem_.size() && ubo_map_[i])
-      {
-        ubo_mem_[i].unmapMemory();
-        ubo_map_[i] = nullptr;
-      }
-    }
-    ubo_map_.clear();
-    ubo_mem_.clear();
+    UnmapAndClearMappedBuffers(ubo_mem_, ubo_map_);
     ubo_buf_.clear();
     IRenderPass::Destroy(ctx);
   }

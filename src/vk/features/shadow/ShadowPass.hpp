@@ -16,16 +16,7 @@ namespace vkfw
     void Destroy(VkContext &ctx) override
     {
       ctx.Device().waitIdle();
-      for (size_t i = 0; i < ubo_map_.size(); ++i)
-      {
-        if (i < ubo_mem_.size() && ubo_map_[i])
-        {
-          ubo_mem_[i].unmapMemory();
-          ubo_map_[i] = nullptr;
-        }
-      }
-      ubo_map_.clear();
-      ubo_mem_.clear();
+      UnmapAndClearMappedBuffers(ubo_mem_, ubo_map_);
       ubo_buf_.clear();
       ds_.clear();
       dp_ = nullptr;
