@@ -37,6 +37,7 @@ namespace vkfw
       terrain_shadow_pipeline_ = nullptr;
       mesh_shadow_pipeline_ = nullptr;
       pipeline_ = nullptr;
+      tex_dsl_ = nullptr;
       dsl_ = nullptr;
     };
     void Record(FrameContext &frame, RenderTargets &targets) override {
@@ -62,16 +63,19 @@ namespace vkfw
 
   private:
     vk::raii::DescriptorSetLayout CreateDescriptorSetLayout(const vk::raii::Device &device);
+    vk::raii::DescriptorSetLayout CreateTextureSetLayout(const vk::raii::Device &device);
     vk::raii::PipelineLayout CreatePipelineLayout(const vk::raii::Device &device, const vk::DescriptorSetLayout &raw_dsl);
 
     vk::raii::Pipeline CreatePipeline(const vk::raii::Device &device,
                                       vk::Format depth_format,
                                       const std::string &path,
-                                      const char *entry_point,
+                                      const char *vert_entry,
+                                      const char *frag_entry,
                                       bool instanced);
     void CreateShadowResources(VkContext &ctx, uint32_t res);
 
     vk::raii::DescriptorSetLayout dsl_{nullptr};
+    vk::raii::DescriptorSetLayout tex_dsl_{nullptr};
     vk::raii::DescriptorPool dp_{nullptr};
     std::vector<vk::raii::DescriptorSet> ds_{};
 

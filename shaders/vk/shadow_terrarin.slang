@@ -11,6 +11,10 @@ struct CameraData {
 [[vk::binding(0, 0)]]
 ConstantBuffer<CameraData> ubo;
 
+// Set=1 binding=0: terrain texture (optional alpha discard)
+[[vk::binding(0, 1)]]
+Sampler2D alphaTex;
+
 struct VertexInput {
     [[vk::location(0)]] float3 pos : POSITION;
     [[vk::location(1)]] float3 normal : NORMAL;
@@ -19,8 +23,7 @@ struct VertexInput {
 
 struct VertexOutput {
     float4 sv_position : SV_Position;
-    [[vk::location(0)]] float3 normal : NORMAL;
-    [[vk::location(1)]] float2 uv : TEXCOORD0;
+    [[vk::location(0)]] float2 uv : TEXCOORD0;
 };
 
 // 修复点：HLSL 使用 float2/float3，而不是 vec2/vec3
@@ -32,7 +35,7 @@ float waveFun(float time, float A, float f, float p, float k, float2 D, float3 p
 
 
 [shader("vertex")]
-VertexOutput main(VertexInput input) {
+VertexOutput vertMain(VertexInput input) {
     VertexOutput output;
 
     float4 worldPos = float4(input.pos, 1.0);
@@ -48,6 +51,15 @@ VertexOutput main(VertexInput input) {
     worldPos.y -=2.50;
 
     output.sv_position = mul(ubo.light_world_to_clip_matrix, worldPos);
+    output.uv = input.uv;
     
     return output;
+}
+
+[shader("fragment")]
+void fragMain(VertexOutput input)
+{
+    // float a = alphaTex.Sample(input.uv).a;
+    // if (a < 0.1)
+    //     discard;
 }

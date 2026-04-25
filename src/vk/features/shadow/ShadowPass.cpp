@@ -13,21 +13,6 @@
 
 namespace vkfw
 {
-  namespace
-  {
-    static std::vector<char> ReadFile(std::string const &filename)
-    {
-      std::ifstream file(filename, std::ios::ate | std::ios::binary);
-      if (!file.is_open())
-        throw std::runtime_error("Failed to open file: " + filename);
-
-      std::vector<char> buffer(static_cast<size_t>(file.tellg()));
-      file.seekg(0, std::ios::beg);
-      file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
-      file.close();
-      return buffer;
-    }
-  } // namespace
 
   bool ShadowPass::Create(VkContext &ctx, VkSwapchain const &swapchain, RenderTargets &targets)
   {
@@ -48,6 +33,7 @@ namespace vkfw
 
     // 2. 创建 UBO 描述符 (Light matrix)
     dsl_ = CreateDescriptorSetLayout(device);
+    tex_dsl_ = CreateTextureSetLayout(device);
 
     vk::DescriptorPoolSize ps{};
     ps.type = vk::DescriptorType::eUniformBuffer;
@@ -98,9 +84,8 @@ namespace vkfw
 
     pipeline_layout_ = CreatePipelineLayout(device, *dsl_);
     // 2. 创建极简管线 (只有 Vertex Shader, 无 Fragment Shader)
-    terrain_shadow_pipeline_ = CreatePipeline(device, vk::Format::eD32Sfloat, "res/vk/shadow_terrarin.spv", "main", false);
-    // Note: our build step compiles Slang to SPIR-V with the entry point name `main`.
-    mesh_shadow_pipeline_ = CreatePipeline(device, vk::Format::eD32Sfloat, "res/vk/shadow_mesh.spv", "main", true);
+    terrain_shadow_pipeline_ = CreatePipeline(device, vk::Format::eD32Sfloat, "res/vk/shadow_terrarin.spv", "vertMain", "fragMain", false);
+    mesh_shadow_pipeline_ = CreatePipeline(device, vk::Format::eD32Sfloat, "res/vk/shadow_mesh.spv", "vertMain", "fragMain", true);
 
     return true;
   }
@@ -196,10 +181,25 @@ namespace vkfw
     return vk::raii::DescriptorSetLayout{device, dsl_ci};
   }
 
+  vk::raii::DescriptorSetLayout ShadowPass::CreateTextureSetLayout(const vk::raii::Device &device)
+  {
+    vk::DescriptorSetLayoutBinding smp_bind{};
+    smp_bind.binding = 0;
+    smp_bind.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+    smp_bind.descriptorCount = 1;
+    smp_bind.stageFlags = vk::ShaderStageFlagBits::eFragment;
+
+    vk::DescriptorSetLayoutCreateInfo dsl_ci{};
+    dsl_ci.bindingCount = 1;
+    dsl_ci.pBindings = &smp_bind;
+    return vk::raii::DescriptorSetLayout{device, dsl_ci};
+  }
+
   vk::raii::Pipeline ShadowPass::CreatePipeline(const vk::raii::Device &device,
                                                 vk::Format depth_format,
                                                 const std::string &path,
-                                                const char *entry_point,
+                                                const char *vert_entry,
+                                                const char *frag_entry,
                                                 bool instanced)
   {
     // 加载 shadow.vert.spv (只有顶点着色器)
@@ -207,10 +207,13 @@ namespace vkfw
     vk::ShaderModuleCreateInfo sm_ci{.codeSize = code.size(), .pCode = (uint32_t *)code.data()};
     vk::raii::ShaderModule shader_module{device, sm_ci};
 
-    vk::PipelineShaderStageCreateInfo stage{};
-    stage.stage = vk::ShaderStageFlagBits::eVertex;
-    stage.module = *shader_module;
-    stage.pName = entry_point;
+    vk::PipelineShaderStageCreateInfo stages[2]{};
+    stages[0].stage = vk::ShaderStageFlagBits::eVertex;
+    stages[0].module = *shader_module;
+    stages[0].pName = vert_entry;
+    stages[1].stage = vk::ShaderStageFlagBits::eFragment;
+    stages[1].module = *shader_module;
+    stages[1].pName = frag_entry;
 
     // 顶点输入：和 Terrain 一模一样，这样可以复用同一个 VBO
     std::vector<vk::VertexInputBindingDescription> binding{};
@@ -288,8 +291,8 @@ namespace vkfw
 
     vk::GraphicsPipelineCreateInfo gp_ci{};
     gp_ci.pNext = &rendering_ci; // 关联动态渲染
-    gp_ci.stageCount = 1;
-    gp_ci.pStages = &stage;
+    gp_ci.stageCount = 2;
+    gp_ci.pStages = stages;
     gp_ci.pVertexInputState = &vi;
     gp_ci.pInputAssemblyState = &ia;
     gp_ci.pViewportState = &vp;
@@ -306,8 +309,9 @@ namespace vkfw
   vk::raii::PipelineLayout ShadowPass::CreatePipelineLayout(const vk::raii::Device &device, const vk::DescriptorSetLayout &raw_dsl)
   {
     vk::PipelineLayoutCreateInfo pl_ci{};
-    pl_ci.setLayoutCount = 1;
-    pl_ci.pSetLayouts = &raw_dsl;
+    std::array<vk::DescriptorSetLayout, 2> layouts = {raw_dsl, *tex_dsl_};
+    pl_ci.setLayoutCount = static_cast<uint32_t>(layouts.size());
+    pl_ci.pSetLayouts = layouts.data();
     // 这里绑定包含 LightMatrix 的 DescriptorSetLayout
     return vk::raii::PipelineLayout{device, pl_ci};
   }

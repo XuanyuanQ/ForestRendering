@@ -21,8 +21,6 @@ namespace vkfw
     void setDebugParameter(DebugParam &param) override { debugParameter_ = &param; }
 
   private:
-    vk::raii::DescriptorSetLayout CreateDescriptorSetLayout(const vk::raii::Device &device);
-    vk::raii::DescriptorPool CreateDescriptorPool(const vk::raii::Device &device, const int image_count);
     /**
      * @brief 为每一帧分配 Uniform Buffer 及其背后的内存映射
      * @param device 逻辑设备句柄
@@ -45,7 +43,6 @@ namespace vkfw
                         const std::string &shader_path,
                         vk::Format color_format,
                         vk::Format depth_format);
-    void UpdateDescriptorSets(const vk::raii::Device &device, uint32_t image_count, RenderTargets const &targets);
 
   private:
     vk::raii::PipelineLayout pipeline_layout_{nullptr};
@@ -56,9 +53,17 @@ namespace vkfw
     vk::raii::DeviceMemory index_memory_{nullptr};
     Model terrtain_;
 
-    vk::raii::DescriptorSetLayout dsl_{nullptr};
-    vk::raii::DescriptorPool dp_{nullptr};
-    std::vector<vk::raii::DescriptorSet> ds_{};
+    vk::raii::DescriptorSetLayout ubo_dsl_{nullptr};      // set=0
+    vk::raii::DescriptorSetLayout material_dsl_{nullptr}; // set=1
+    vk::raii::DescriptorSetLayout shadow_dsl_{nullptr};   // set=2
+
+    vk::raii::DescriptorPool ubo_dp_{nullptr};
+    vk::raii::DescriptorPool material_dp_{nullptr};
+    vk::raii::DescriptorPool shadow_dp_{nullptr};
+
+    std::vector<vk::raii::DescriptorSet> ubo_ds_{};
+    std::vector<vk::raii::DescriptorSet> material_ds_{};
+    std::vector<vk::raii::DescriptorSet> shadow_ds_{};
 
     std::vector<vk::raii::Buffer> ubo_buf_{};
     std::vector<vk::raii::DeviceMemory> ubo_mem_{};

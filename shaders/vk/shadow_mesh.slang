@@ -11,16 +11,37 @@ struct CameraData {
 [[vk::binding(0, 0)]]
 ConstantBuffer<CameraData> ubo;
 
+// Set=1 binding=0: alpha texture for shadow discard
+[[vk::binding(0, 1)]]
+Sampler2D alphaTex;
+
 struct VertexInput {
     [[vk::location(0)]] float3 pos : POSITION;
     // 实例属性默认按列对齐插槽
     [[vk::location(3)]] float4x4 instanceModel;
+    [[vk::location(2)]] float2 uv : TEXCOORD0;
+};
+
+struct VertexOutput {
+    float4 sv_position : SV_Position;
+    [[vk::location(0)]] float2 uv : TEXCOORD0;
 };
 
 [shader("vertex")]
-float4 main(VertexInput input) : SV_Position {
+VertexOutput vertMain(VertexInput input) {
+    VertexOutput output;
     // 计算世界坐标
     float4 worldPos = mul(input.instanceModel, float4(input.pos, 1.0));
     // 变换到裁剪空间
-    return mul(ubo.light, worldPos);
+    output.sv_position = mul(ubo.light, worldPos);
+    output.uv = input.uv;
+    return output;
+}
+
+[shader("fragment")]
+void fragMain(VertexOutput input)
+{
+    float a = alphaTex.Sample(input.uv).a;
+    // if (a < 0.1)
+    //     discard;
 }

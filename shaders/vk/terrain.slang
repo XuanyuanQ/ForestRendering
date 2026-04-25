@@ -60,10 +60,10 @@ VertexOutput vertMain(VertexInput input) {
     return output;
 }
 
-[[vk::binding(1, 0)]] 
+[[vk::binding(0, 1)]] 
 Sampler2D texSampler; 
 
-[[vk::binding(2, 0)]]
+[[vk::binding(0, 2)]]
 Sampler2D shadowMap;
 
 float ShadowFactor(float4 lightClip)

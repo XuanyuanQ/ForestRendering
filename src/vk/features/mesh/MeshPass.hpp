@@ -55,11 +55,17 @@ namespace vkfw
         vk::raii::PipelineLayout pipeline_layout_{nullptr};
         vk::raii::Pipeline pipeline_{nullptr};
 
-        vk::raii::DescriptorSetLayout dsl_{nullptr};
-        vk::raii::DescriptorPool dp_{nullptr};
+        vk::raii::DescriptorSetLayout ubo_dsl_{nullptr};      // set=0
+        vk::raii::DescriptorSetLayout material_dsl_{nullptr}; // set=1
+        vk::raii::DescriptorSetLayout shadow_dsl_{nullptr};   // set=2
 
-        // 这里存所有的描述符集：每帧 2 个（树干+树叶），如果 3 帧缓冲，这里就有 6 个
-        std::vector<vk::raii::DescriptorSet> ds_{};
+        vk::raii::DescriptorPool ubo_dp_{nullptr};
+        vk::raii::DescriptorPool material_dp_{nullptr};
+        vk::raii::DescriptorPool shadow_dp_{nullptr};
+
+        std::vector<vk::raii::DescriptorSet> ubo_ds_{};
+        std::vector<vk::raii::DescriptorSet> material_ds_{};
+        std::vector<vk::raii::DescriptorSet> shadow_ds_{};
 
         std::vector<vk::raii::Buffer> ubo_buf_{};
         std::vector<vk::raii::DeviceMemory> ubo_mem_{};

@@ -167,54 +167,97 @@ namespace vkfw
 
     CreateCommonSampler(device);
 
-    // 4. Descriptor Layout
-    vk::DescriptorSetLayoutBinding ub_bind{};
-    ub_bind.binding = 0;
-    ub_bind.descriptorType = vk::DescriptorType::eUniformBuffer;
-    ub_bind.descriptorCount = 1;
-    ub_bind.stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+    // 4. Descriptor Set Layouts (set=0 UBO, set=1 material, set=2 shadow map)
+    uint32_t const image_count = swapchain.ImageCount();
+    uint32_t const material_count = static_cast<uint32_t>(textures_.size());
 
-    vk::DescriptorSetLayoutBinding smp_bind{};
-    smp_bind.binding = 1;
-    smp_bind.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-    smp_bind.descriptorCount = 1;
-    smp_bind.stageFlags = vk::ShaderStageFlagBits::eFragment;
+    {
+      vk::DescriptorSetLayoutBinding ubo_bind{};
+      ubo_bind.binding = 0;
+      ubo_bind.descriptorType = vk::DescriptorType::eUniformBuffer;
+      ubo_bind.descriptorCount = 1;
+      ubo_bind.stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+      vk::DescriptorSetLayoutCreateInfo ci{};
+      ci.bindingCount = 1;
+      ci.pBindings = &ubo_bind;
+      ubo_dsl_ = vk::raii::DescriptorSetLayout{device, ci};
+    }
 
-    vk::DescriptorSetLayoutBinding shadow_bind{};
-    shadow_bind.binding = 2;
-    shadow_bind.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-    shadow_bind.descriptorCount = 1;
-    shadow_bind.stageFlags = vk::ShaderStageFlagBits::eFragment;
+    {
+      vk::DescriptorSetLayoutBinding mat_bind{};
+      mat_bind.binding = 0;
+      mat_bind.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+      mat_bind.descriptorCount = 1;
+      mat_bind.stageFlags = vk::ShaderStageFlagBits::eFragment;
+      vk::DescriptorSetLayoutCreateInfo ci{};
+      ci.bindingCount = 1;
+      ci.pBindings = &mat_bind;
+      material_dsl_ = vk::raii::DescriptorSetLayout{device, ci};
+    }
 
-    std::array<vk::DescriptorSetLayoutBinding, 3> binds = {ub_bind, smp_bind, shadow_bind};
-    vk::DescriptorSetLayoutCreateInfo dsl_ci{};
-    dsl_ci.bindingCount = static_cast<uint32_t>(binds.size());
-    dsl_ci.pBindings = binds.data();
-    dsl_ = vk::raii::DescriptorSetLayout{device, dsl_ci};
+    {
+      vk::DescriptorSetLayoutBinding sh_bind{};
+      sh_bind.binding = 0;
+      sh_bind.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+      sh_bind.descriptorCount = 1;
+      sh_bind.stageFlags = vk::ShaderStageFlagBits::eFragment;
+      vk::DescriptorSetLayoutCreateInfo ci{};
+      ci.bindingCount = 1;
+      ci.pBindings = &sh_bind;
+      shadow_dsl_ = vk::raii::DescriptorSetLayout{device, ci};
+    }
 
-    // 5. Descriptor Pool
-    uint32_t image_count = swapchain.ImageCount();
-    uint32_t total_sets = image_count * 2;
-    std::array<vk::DescriptorPoolSize, 2> ps{};
-    ps[0] = {vk::DescriptorType::eUniformBuffer, total_sets};
-    // binding=1 (albedo) + binding=2 (shadow map)
-    ps[1] = {vk::DescriptorType::eCombinedImageSampler, total_sets * 2u};
+    // Pools + allocate sets
+    {
+      vk::DescriptorPoolSize ps{vk::DescriptorType::eUniformBuffer, image_count};
+      vk::DescriptorPoolCreateInfo dp_ci{};
+      dp_ci.maxSets = image_count;
+      dp_ci.poolSizeCount = 1;
+      dp_ci.pPoolSizes = &ps;
+      ubo_dp_ = vk::raii::DescriptorPool{device, dp_ci};
 
-    vk::DescriptorPoolCreateInfo dp_ci{};
-    dp_ci.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
-    dp_ci.maxSets = total_sets;
-    dp_ci.poolSizeCount = 2;
-    dp_ci.pPoolSizes = ps.data();
-    dp_ = vk::raii::DescriptorPool{device, dp_ci};
+      std::vector<vk::DescriptorSetLayout> layouts(image_count, *ubo_dsl_);
+      vk::DescriptorSetAllocateInfo ai{};
+      ai.descriptorPool = *ubo_dp_;
+      ai.descriptorSetCount = image_count;
+      ai.pSetLayouts = layouts.data();
+      ubo_ds_ = device.allocateDescriptorSets(ai);
+    }
 
-    std::vector<vk::DescriptorSetLayout> layouts(total_sets, *dsl_);
-    vk::DescriptorSetAllocateInfo ds_ai{};
-    ds_ai.descriptorPool = *dp_;
-    ds_ai.descriptorSetCount = total_sets;
-    ds_ai.pSetLayouts = layouts.data();
-    ds_ = device.allocateDescriptorSets(ds_ai);
+    {
+      uint32_t const set_count = image_count * material_count;
+      vk::DescriptorPoolSize ps{vk::DescriptorType::eCombinedImageSampler, set_count};
+      vk::DescriptorPoolCreateInfo dp_ci{};
+      dp_ci.maxSets = set_count;
+      dp_ci.poolSizeCount = 1;
+      dp_ci.pPoolSizes = &ps;
+      material_dp_ = vk::raii::DescriptorPool{device, dp_ci};
 
-    // 6. UBO 与 更新
+      std::vector<vk::DescriptorSetLayout> layouts(set_count, *material_dsl_);
+      vk::DescriptorSetAllocateInfo ai{};
+      ai.descriptorPool = *material_dp_;
+      ai.descriptorSetCount = set_count;
+      ai.pSetLayouts = layouts.data();
+      material_ds_ = device.allocateDescriptorSets(ai);
+    }
+
+    {
+      vk::DescriptorPoolSize ps{vk::DescriptorType::eCombinedImageSampler, image_count};
+      vk::DescriptorPoolCreateInfo dp_ci{};
+      dp_ci.maxSets = image_count;
+      dp_ci.poolSizeCount = 1;
+      dp_ci.pPoolSizes = &ps;
+      shadow_dp_ = vk::raii::DescriptorPool{device, dp_ci};
+
+      std::vector<vk::DescriptorSetLayout> layouts(image_count, *shadow_dsl_);
+      vk::DescriptorSetAllocateInfo ai{};
+      ai.descriptorPool = *shadow_dp_;
+      ai.descriptorSetCount = image_count;
+      ai.pSetLayouts = layouts.data();
+      shadow_ds_ = device.allocateDescriptorSets(ai);
+    }
+
+    // UBO buffers + updates
     ubo_buf_.reserve(image_count);
     ubo_mem_.reserve(image_count);
     ubo_map_.resize(image_count, nullptr);
@@ -234,35 +277,44 @@ namespace vkfw
       ubo_buf_.back().bindMemory(*ubo_mem_.back(), 0);
       ubo_map_[i] = ubo_mem_.back().mapMemory(0, sizeof(CameraUBO));
 
-      for (uint32_t m = 0; m < textures_.size(); ++m)
+      vk::DescriptorBufferInfo bi{*ubo_buf_[i], 0, sizeof(CameraUBO)};
+      vk::WriteDescriptorSet w{};
+      w.dstSet = *ubo_ds_[i];
+      w.dstBinding = 0;
+      w.descriptorCount = 1;
+      w.descriptorType = vk::DescriptorType::eUniformBuffer;
+      w.pBufferInfo = &bi;
+      device.updateDescriptorSets({w}, {});
+    }
+
+    // Material sets (shared by main + shadow pipelines)
+    for (uint32_t i = 0; i < image_count; ++i)
+    {
+      for (uint32_t m = 0; m < material_count; ++m)
       {
-        vk::DescriptorBufferInfo bi{*ubo_buf_[i], 0, sizeof(CameraUBO)};
+        uint32_t const idx = i * material_count + m;
         vk::DescriptorImageInfo ii{*common_sampler_, *textures_[m].view, vk::ImageLayout::eShaderReadOnlyOptimal};
-        vk::DescriptorImageInfo si{targets.shadow_map.sampler, targets.shadow_map.view, vk::ImageLayout::eShaderReadOnlyOptimal};
-
-        vk::WriteDescriptorSet w_ubo{};
-        w_ubo.dstSet = *ds_[i * 2 + m];
-        w_ubo.dstBinding = 0;
-        w_ubo.descriptorCount = 1;
-        w_ubo.descriptorType = vk::DescriptorType::eUniformBuffer;
-        w_ubo.pBufferInfo = &bi;
-
-        vk::WriteDescriptorSet w_smp{};
-        w_smp.dstSet = *ds_[i * 2 + m];
-        w_smp.dstBinding = 1;
-        w_smp.descriptorCount = 1;
-        w_smp.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        w_smp.pImageInfo = &ii;
-
-        vk::WriteDescriptorSet w_shadow{};
-        w_shadow.dstSet = *ds_[i * 2 + m];
-        w_shadow.dstBinding = 2;
-        w_shadow.descriptorCount = 1;
-        w_shadow.descriptorType = vk::DescriptorType::eCombinedImageSampler;
-        w_shadow.pImageInfo = &si;
-
-        device.updateDescriptorSets({w_ubo, w_smp, w_shadow}, {});
+        vk::WriteDescriptorSet w{};
+        w.dstSet = *material_ds_[idx];
+        w.dstBinding = 0;
+        w.descriptorCount = 1;
+        w.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+        w.pImageInfo = &ii;
+        device.updateDescriptorSets({w}, {});
       }
+    }
+
+    // Shadow map set (main pipeline only)
+    for (uint32_t i = 0; i < image_count; ++i)
+    {
+      vk::DescriptorImageInfo si{targets.shadow_map.sampler, targets.shadow_map.view, vk::ImageLayout::eShaderReadOnlyOptimal};
+      vk::WriteDescriptorSet w{};
+      w.dstSet = *shadow_ds_[i];
+      w.dstBinding = 0;
+      w.descriptorCount = 1;
+      w.descriptorType = vk::DescriptorType::eCombinedImageSampler;
+      w.pImageInfo = &si;
+      device.updateDescriptorSets({w}, {});
     }
 
     // 7. Pipeline (使用最稳妥的显式赋值)
@@ -344,9 +396,9 @@ namespace vkfw
     dy.pDynamicStates = dyn;
 
     vk::PipelineLayoutCreateInfo pl_ci{};
-    vk::DescriptorSetLayout raw_dsl = *dsl_;
-    pl_ci.setLayoutCount = 1;
-    pl_ci.pSetLayouts = &raw_dsl;
+    std::array<vk::DescriptorSetLayout, 3> set_layouts = {*ubo_dsl_, *material_dsl_, *shadow_dsl_};
+    pl_ci.setLayoutCount = static_cast<uint32_t>(set_layouts.size());
+    pl_ci.pSetLayouts = set_layouts.data();
     pipeline_layout_ = vk::raii::PipelineLayout{device, pl_ci};
 
     vk::Format cf = swapchain.Format();
@@ -398,9 +450,15 @@ namespace vkfw
     ubo_buf_.clear();
 
     // 3. 释放描述符
-    ds_.clear();
-    dp_ = nullptr;
-    dsl_ = nullptr;
+    ubo_ds_.clear();
+    material_ds_.clear();
+    shadow_ds_.clear();
+    ubo_dp_ = nullptr;
+    material_dp_ = nullptr;
+    shadow_dp_ = nullptr;
+    ubo_dsl_ = nullptr;
+    material_dsl_ = nullptr;
+    shadow_dsl_ = nullptr;
 
     // 4. 释放模型缓冲
     ib_ = nullptr;
@@ -509,16 +567,23 @@ namespace vkfw
     // --- 核心：分子网格（树干、树叶）绘制 ---
     for (const auto &sm : sub_meshes_)
     {
-      // 只有主渲染 pass 才绑定材质纹理等描述符；ShadowPass 会在外部绑定光源矩阵 UBO。
-      if (use_own_layout)
+      if (!use_own_layout)
       {
-        // 计算当前帧对应的描述符集索引 (img * 2 + 材质索引)
-        uint32_t ds_idx = image_index * 2 + sm.textureIndex;
-        if (ds_idx < ds_.size())
-        {
-          vk::DescriptorSet set = *ds_[ds_idx];
-          cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 0, {set}, {});
-        }
+        // Shadow pass: bind material (alpha) at set=1
+        uint32_t const idx = image_index * static_cast<uint32_t>(textures_.size()) + sm.textureIndex;
+        if (idx < material_ds_.size())
+          cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 1, {*material_ds_[idx]}, {});
+      }
+      else
+      {
+        if (image_index < ubo_ds_.size())
+          cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 0, {*ubo_ds_[image_index]}, {});
+        if (image_index < shadow_ds_.size())
+          cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 2, {*shadow_ds_[image_index]}, {});
+
+        uint32_t const idx = image_index * static_cast<uint32_t>(textures_.size()) + sm.textureIndex;
+        if (idx < material_ds_.size())
+          cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 1, {*material_ds_[idx]}, {});
       }
 
       cmd.drawIndexed(sm.indexCount, instance_count_, sm.firstIndex, 0, 0);

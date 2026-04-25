@@ -22,10 +22,10 @@ struct FragmentInput
 // 2. 定义资源绑定
 // 在 Slang 中，Texture 和 Sampler 通常成对使用
 // 如果你的 Vulkan 代码使用的是 Combined Image Sampler，就这样写：
-[[vk::binding(1, 0)]] 
+[[vk::binding(0, 1)]] 
 Sampler2D texSampler; 
 
-[[vk::binding(2, 0)]]
+[[vk::binding(0, 2)]]
 Sampler2D shadowMap;
 
 float ShadowFactor(float4 lightClip)
