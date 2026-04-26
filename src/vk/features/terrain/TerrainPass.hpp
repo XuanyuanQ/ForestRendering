@@ -1,6 +1,7 @@
 #pragma once
 #include "vk/scene/Model.hpp"
 #include "vk/renderer/IRenderPass.hpp"
+#include "vk/renderer/FrameContext.hpp"
 
 #if defined(__INTELLISENSE__) || !defined(USE_CPP20_MODULES)
 #include <vulkan/vulkan_raii.hpp>
@@ -10,27 +11,20 @@ import vulkan_hpp;
 
 namespace vkfw
 {
+
   class TerrainPass final : public IRenderPass
   {
   public:
+    explicit TerrainPass(RenderType render_type = RenderType::Opaque) : IRenderPass(render_type) {};    
     bool Create(VkContext &ctx, VkSwapchain const &swapchain, RenderTargets &targets) override;
     void Destroy(VkContext &ctx) override;
     void OnSwapchainRecreated(VkContext &ctx, VkSwapchain const &swapchain, RenderTargets &targets) override;
     void Record(FrameContext &frame, RenderTargets &targets) override;
-    void JustDraw(vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index) override;
+    void JustDraw(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index) override;
+    void RecordShadow(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index) override;
     void setDebugParameter(DebugParam &param) override { debugParameter_ = &param; }
 
   private:
-    /**
-     * @brief 为每一帧分配 Uniform Buffer 及其背后的内存映射
-     * @param device 逻辑设备句柄
-     * @param mem_props 物理设备内存属性（用于查找内存类型）
-     * @param image_count 需要创建的数量（通常等于 Swapchain Image Count）
-     */
-    void CreateUniformBuffers(
-        const VkContext &ctx,
-        const vk::PhysicalDeviceMemoryProperties &mem_props,
-        uint32_t image_count);
     void CreateVertexBuffer(
         const VkContext &ctx,
         const vk::PhysicalDeviceMemoryProperties &mem_props,
@@ -39,36 +33,13 @@ namespace vkfw
         const VkContext &ctx,
         const vk::PhysicalDeviceMemoryProperties &mem_props,
         const Model &model);
-    void CreatePipeline(const vk::raii::Device &device,
-                        const std::string &shader_path,
-                        vk::Format color_format,
-                        vk::Format depth_format);
 
   private:
-    vk::raii::PipelineLayout pipeline_layout_{nullptr};
-    vk::raii::Pipeline pipeline_{nullptr};
     vk::raii::Buffer vertex_buffer_{nullptr};
     vk::raii::DeviceMemory vertex_memory_{nullptr};
     vk::raii::Buffer index_buffer_{nullptr};
     vk::raii::DeviceMemory index_memory_{nullptr};
     Model terrtain_;
-
-    vk::raii::DescriptorSetLayout ubo_dsl_{nullptr};      // set=0
-    vk::raii::DescriptorSetLayout material_dsl_{nullptr}; // set=1
-    vk::raii::DescriptorSetLayout shadow_dsl_{nullptr};   // set=2
-
-    vk::raii::DescriptorPool ubo_dp_{nullptr};
-    vk::raii::DescriptorPool material_dp_{nullptr};
-    vk::raii::DescriptorPool shadow_dp_{nullptr};
-
-    std::vector<vk::raii::DescriptorSet> ubo_ds_{};
-    std::vector<vk::raii::DescriptorSet> material_ds_{};
-    std::vector<vk::raii::DescriptorSet> shadow_ds_{};
-
-    std::vector<vk::raii::Buffer> ubo_buf_{};
-    std::vector<vk::raii::DeviceMemory> ubo_mem_{};
-    std::vector<void *> ubo_map_{};
-
     DebugParam *debugParameter_ = nullptr;
   };
 

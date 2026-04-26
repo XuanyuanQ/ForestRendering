@@ -19,12 +19,14 @@ namespace vkfw
     class MeshPass final : public IRenderPass
     {
     public:
-        explicit MeshPass(std::string model_path);
+        explicit MeshPass(RenderType render_type = RenderType::Opaque, std::string model_path = ""  ) 
+            : IRenderPass(render_type), model_path_(std::move(model_path)) {};
         bool Create(VkContext &ctx, VkSwapchain const &swapchain, RenderTargets &targets) override;
         void Destroy(VkContext &ctx) override;
         void OnSwapchainRecreated(VkContext &ctx, VkSwapchain const &swapchain, RenderTargets &targets) override;
         void Record(FrameContext &frame, RenderTargets &targets) override;
-        void JustDraw(vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index) override;
+        void JustDraw(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index) override;
+        void RecordShadow(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index) override;
         void setDebugParameter(DebugParam &param) override { debugParameter_ = &param; }
 
     private:
@@ -52,25 +54,6 @@ namespace vkfw
         std::string model_path_;
         std::vector<SubMesh> sub_meshes_;
 
-        vk::raii::PipelineLayout pipeline_layout_{nullptr};
-        vk::raii::Pipeline pipeline_{nullptr};
-
-        vk::raii::DescriptorSetLayout ubo_dsl_{nullptr};      // set=0
-        vk::raii::DescriptorSetLayout material_dsl_{nullptr}; // set=1
-        vk::raii::DescriptorSetLayout shadow_dsl_{nullptr};   // set=2
-
-        vk::raii::DescriptorPool ubo_dp_{nullptr};
-        vk::raii::DescriptorPool material_dp_{nullptr};
-        vk::raii::DescriptorPool shadow_dp_{nullptr};
-
-        std::vector<vk::raii::DescriptorSet> ubo_ds_{};
-        std::vector<vk::raii::DescriptorSet> material_ds_{};
-        std::vector<vk::raii::DescriptorSet> shadow_ds_{};
-
-        std::vector<vk::raii::Buffer> ubo_buf_{};
-        std::vector<vk::raii::DeviceMemory> ubo_mem_{};
-        std::vector<void *> ubo_map_{};
-
         vk::raii::Buffer vb_{nullptr};
         vk::raii::DeviceMemory vb_mem_{nullptr};
         vk::raii::Buffer ib_{nullptr};
@@ -79,12 +62,6 @@ namespace vkfw
         uint32_t total_index_count_ = 0;
         glm::mat4 model_matrix_{1.0f};
         DebugParam *debugParameter_ = nullptr;
-
-        // 材质资源数组 待删除
-        std::vector<vk::raii::Image> tex_imgs_;
-        std::vector<vk::raii::DeviceMemory> tex_mems_;
-        std::vector<vk::raii::ImageView> tex_views_;
-        vk::raii::Sampler texture_sampler_{nullptr};
     };
 
 } // namespace vkfw

@@ -11,40 +11,29 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include <array>
-#include <cassert>
 #include <cstring>
-#include <fstream>
 #include <stdexcept>
-
-// #define STB_IMAGE_IMPLEMENTATION
 #include "vk/scene/stb_image.h"
 
 #include <random>
-#include <iostream>
 
 namespace vkfw
 {
-
-  MeshPass::MeshPass(std::string model_path) : model_path_(std::move(model_path)) {}
 
   bool MeshPass::Create(VkContext &ctx, VkSwapchain const &swapchain, RenderTargets &targets)
   {
     auto &device = ctx.Device();
     sub_meshes_.clear();
 
-    // 1. 分别加载模型零件
     Model stemModel = Model::LoadFromFile("res/47-mapletree/MapleTreeStem.obj");
     Model leafModel = Model::LoadFromFile("res/47-mapletree/MapleTreeLeaves.obj");
 
-    // 记录子网格信息
     sub_meshes_.push_back({(uint32_t)stemModel.indices.size(), 0, 0});
     sub_meshes_.push_back({(uint32_t)leafModel.indices.size(), (uint32_t)stemModel.indices.size(), 1});
 
-    // 合并顶点
     std::vector<Vertex> all_vertices = stemModel.vertices;
     all_vertices.insert(all_vertices.end(), leafModel.vertices.begin(), leafModel.vertices.end());
 
-    // 合并索引 (处理偏移)
     std::vector<uint32_t> all_indices = stemModel.indices;
     uint32_t stemVertexOffset = static_cast<uint32_t>(stemModel.vertices.size());
     for (auto idx : leafModel.indices)
@@ -52,37 +41,24 @@ namespace vkfw
       all_indices.push_back(idx + stemVertexOffset);
     }
     total_index_count_ = static_cast<uint32_t>(all_indices.size());
-    //   glm::mat4 t = glm::translate(glm::mat4{1.0f}, -stemModel.center);
-
-    //   // 关键：这里乘以 0.1f 缩小 10 倍，这样它就不会怼到相机脸上了
-    //   float scale_factor = 0.5f / (stemModel.radius > 0.0f ? stemModel.radius : 1.0f);
-    //   glm::mat4 s = glm::scale(glm::mat4{1.0f}, glm::vec3{scale_factor});
-
-    //   model_matrix_ = s * t;
     std::default_random_engine generator;
-    std::uniform_real_distribution<float> pos_dist(-5.0f, 5.0f);  // 位置微调偏移
-    std::uniform_real_distribution<float> rot_dist(0.0f, 360.0f); // 随机旋转角度
-    std::uniform_real_distribution<float> scale_dist(0.8f, 1.5f); // 随机大小缩放
+    std::uniform_real_distribution<float> pos_dist(-5.0f, 5.0f);
+    std::uniform_real_distribution<float> rot_dist(0.0f, 360.0f);
+    std::uniform_real_distribution<float> scale_dist(0.8f, 1.5f);
 
-    // 1. 生成 10x10 的森林矩阵
     std::vector<InstanceData> instance_matrices;
-    int count = 10;        // 10x10 的森林
-    float spacing = 30.0f; // 树木间距
+    int count = 10;
+    float spacing = 30.0f;
     for (int x = -count; x < count; x++)
     {
       for (int z = -count; z < count; z++)
       {
         InstanceData data;
 
-        // 1. 基础位置 + 随机偏移
         float posX = x * spacing + pos_dist(generator);
         float posZ = z * spacing + pos_dist(generator);
         glm::mat4 m = glm::translate(glm::mat4(1.0f), glm::vec3(posX, 0.0f, posZ));
-
-        // 2. 随机绕 Y 轴旋转（树木在自然界中朝向各异）
         m = glm::rotate(m, glm::radians(rot_dist(generator)), glm::vec3(0, 1, 0));
-
-        // 3. 随机缩放（让树有高有矮，有胖有瘦）
         float s = scale_dist(generator);
         m = glm::scale(m, glm::vec3(s));
 
@@ -92,7 +68,6 @@ namespace vkfw
     }
     instance_count_ = static_cast<uint32_t>(instance_matrices.size());
 
-    // 2. 创建 Instance Buffer
     vk::DeviceSize buffer_size = sizeof(InstanceData) * instance_matrices.size();
     vk::BufferCreateInfo inst_ci{};
     inst_ci.size = buffer_size;
@@ -101,7 +76,7 @@ namespace vkfw
 
     auto inst_req = instance_buf_.getMemoryRequirements();
     vk::MemoryAllocateInfo inst_mai{};
-    inst_mai.sType = vk::StructureType::eMemoryAllocateInfo; // 必须显式指定
+    inst_mai.sType = vk::StructureType::eMemoryAllocateInfo;
     inst_mai.allocationSize = inst_req.size;
     inst_mai.memoryTypeIndex = FindMemoryType(ctx.PhysicalDevice(), inst_req.memoryTypeBits,
                                               vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
@@ -109,12 +84,10 @@ namespace vkfw
     instance_mem_ = vk::raii::DeviceMemory{device, inst_mai};
     instance_buf_.bindMemory(*instance_mem_, 0);
 
-    // 3. 拷贝数据
     void *p_data = instance_mem_.mapMemory(0, buffer_size);
     std::memcpy(p_data, instance_matrices.data(), (size_t)buffer_size);
     instance_mem_.unmapMemory();
 
-    // 2. 创建 VB (展开写法，避免类型匹配报错)
     {
       vk::DeviceSize vb_size = sizeof(Vertex) * all_vertices.size();
       vk::BufferCreateInfo vb_ci{};
@@ -135,7 +108,6 @@ namespace vkfw
       vb_mem_.unmapMemory();
     }
 
-    // 创建 IB
     {
       vk::DeviceSize ib_size = sizeof(uint32_t) * all_indices.size();
       vk::BufferCreateInfo ib_ci{};
@@ -156,7 +128,6 @@ namespace vkfw
       ib_mem_.unmapMemory();
     }
 
-    // 3. 深度与贴图
     if (!targets.shared_depth.Valid())
       throw std::runtime_error("MeshPass requires RenderTargets::shared_depth");
     if (!targets.shadow_map.Valid())
@@ -166,197 +137,26 @@ namespace vkfw
     LoadTexture(ctx, "res/47-mapletree/maple_leaf.png", 1);
 
     CreateCommonSampler(device);
-
-    // 4. Descriptor Set Layouts (set=0 UBO, set=1 material, set=2 shadow map)
-    uint32_t const image_count = swapchain.ImageCount();
-    uint32_t const material_count = static_cast<uint32_t>(textures_.size());
-
-    ubo_dsl_ = CreateSingleBindingDescriptorSetLayout(device, 0, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment);
-    material_dsl_ = CreateSingleBindingDescriptorSetLayout(device, 0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment);
-    shadow_dsl_ = CreateSingleBindingDescriptorSetLayout(device, 0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment);
-
-    // Pools + allocate sets
-    ubo_dp_ = CreateSingleTypeDescriptorPool(device, vk::DescriptorType::eUniformBuffer, image_count, image_count);
-    ubo_ds_ = AllocateDescriptorSets(device, ubo_dp_, ubo_dsl_, image_count);
-
-    uint32_t const set_count = image_count * material_count;
-    material_dp_ = CreateSingleTypeDescriptorPool(device, vk::DescriptorType::eCombinedImageSampler, set_count, set_count);
-    material_ds_ = AllocateDescriptorSets(device, material_dp_, material_dsl_, set_count);
-
-    shadow_dp_ = CreateSingleTypeDescriptorPool(device, vk::DescriptorType::eCombinedImageSampler, image_count, image_count);
-    shadow_ds_ = AllocateDescriptorSets(device, shadow_dp_, shadow_dsl_, image_count);
-
-    // UBO buffers + updates
-    CreateMappedBuffers(device, ctx.PhysicalDevice(), image_count, sizeof(CameraUBO), vk::BufferUsageFlagBits::eUniformBuffer, ubo_buf_, ubo_mem_, ubo_map_);
-    for (uint32_t i = 0; i < image_count; ++i)
-    {
-      WriteUniformBufferDescriptor(device, *ubo_ds_[i], 0, *ubo_buf_[i], sizeof(CameraUBO));
-    }
-
-    // Material sets (shared by main + shadow pipelines)
-    for (uint32_t i = 0; i < image_count; ++i)
-    {
-      for (uint32_t m = 0; m < material_count; ++m)
-      {
-        uint32_t const idx = i * material_count + m;
-        WriteCombinedImageSamplerDescriptor(device, *material_ds_[idx], 0, *common_sampler_, *textures_[m].view);
-      }
-    }
-
-    // Shadow map set (main pipeline only)
-    for (uint32_t i = 0; i < image_count; ++i)
-    {
-      WriteCombinedImageSamplerDescriptor(device, *shadow_ds_[i], 0, targets.shadow_map.sampler, targets.shadow_map.view);
-    }
-
-    // 7. Pipeline (使用最稳妥的显式赋值)
-    auto vert_code = ReadFile("res/vk/mesh.vert.spv");
-    auto frag_code = ReadFile("res/vk/mesh.frag.spv");
-    vk::ShaderModuleCreateInfo vm_ci{};
-    vm_ci.codeSize = vert_code.size();
-    vm_ci.pCode = reinterpret_cast<uint32_t const *>(vert_code.data());
-    vk::raii::ShaderModule vm{device, vm_ci};
-
-    vk::ShaderModuleCreateInfo fm_ci{};
-    fm_ci.codeSize = frag_code.size();
-    fm_ci.pCode = reinterpret_cast<uint32_t const *>(frag_code.data());
-    vk::raii::ShaderModule fm{device, fm_ci};
-
-    vk::PipelineShaderStageCreateInfo ss[2]{};
-    ss[0].stage = vk::ShaderStageFlagBits::eVertex;
-    ss[0].module = *vm;
-    ss[0].pName = "main";
-    ss[1].stage = vk::ShaderStageFlagBits::eFragment;
-    ss[1].module = *fm;
-    ss[1].pName = "main";
-
-    //   auto bdesc = VertexBindingDescription();
-    //   auto adesc = VertexAttributeDescriptions();
-    //   vk::PipelineVertexInputStateCreateInfo vi{};
-    //   vi.vertexBindingDescriptionCount = 1;
-    //   vi.pVertexBindingDescriptions = &bdesc;
-    //   vi.vertexAttributeDescriptionCount = (uint32_t)adesc.size();
-    //   vi.pVertexAttributeDescriptions = adesc.data();
-    // 获取支持 Instancing 的描述 (对应你改好的 Vertex.hpp)
-    // 1. 获取支持 Instancing 的描述 (调用你改好的新函数)
-    // 注意：变量名建议用复数 bdescs 和 adescs，因为它们现在是 vector
-    auto bdescs = VertexBindingDescriptions();
-    auto adescs = VertexAttributeDescriptions();
-
-    // 2. 重新配置顶点输入状态
-    vk::PipelineVertexInputStateCreateInfo vi{};
-    vi.sType = vk::StructureType::ePipelineVertexInputStateCreateInfo;
-
-    // 关键：现在有 2 个 Binding (Vertex + Instance)
-    vi.vertexBindingDescriptionCount = static_cast<uint32_t>(bdescs.size());
-    vi.pVertexBindingDescriptions = bdescs.data();
-
-    // 关键：现在有 7 个 Attribute (Pos, Normal, UV + Matrix的4列)
-    vi.vertexAttributeDescriptionCount = static_cast<uint32_t>(adescs.size());
-    vi.pVertexAttributeDescriptions = adescs.data();
-
-    vk::PipelineInputAssemblyStateCreateInfo ia{};
-    ia.topology = vk::PrimitiveTopology::eTriangleList;
-
-    vk::PipelineRasterizationStateCreateInfo rs{};
-    rs.cullMode = vk::CullModeFlagBits::eBack;
-    rs.frontFace = vk::FrontFace::eCounterClockwise;
-    rs.lineWidth = 1.0f;
-    rs.polygonMode = vk::PolygonMode::eFill;
-
-    vk::PipelineDepthStencilStateCreateInfo dss{};
-    dss.depthTestEnable = 1;
-    dss.depthWriteEnable = 1;
-    dss.depthCompareOp = vk::CompareOp::eLess;
-
-    vk::PipelineColorBlendAttachmentState cba{};
-    cba.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
-    vk::PipelineColorBlendStateCreateInfo cb{};
-    cb.attachmentCount = 1;
-    cb.pAttachments = &cba;
-
-    vk::PipelineViewportStateCreateInfo vp{};
-    vp.viewportCount = 1;
-    vp.scissorCount = 1;
-
-    vk::PipelineMultisampleStateCreateInfo ms{};
-    ms.rasterizationSamples = vk::SampleCountFlagBits::e1;
-
-    vk::DynamicState dyn[] = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
-    vk::PipelineDynamicStateCreateInfo dy{};
-    dy.dynamicStateCount = 2;
-    dy.pDynamicStates = dyn;
-
-    vk::PipelineLayoutCreateInfo pl_ci{};
-    std::array<vk::DescriptorSetLayout, 3> set_layouts = {*ubo_dsl_, *material_dsl_, *shadow_dsl_};
-    pl_ci.setLayoutCount = static_cast<uint32_t>(set_layouts.size());
-    pl_ci.pSetLayouts = set_layouts.data();
-    pipeline_layout_ = vk::raii::PipelineLayout{device, pl_ci};
-
-    vk::Format cf = swapchain.Format();
-    vk::PipelineRenderingCreateInfo rci{};
-    rci.colorAttachmentCount = 1;
-    rci.pColorAttachmentFormats = &cf;
-    rci.depthAttachmentFormat = targets.shared_depth.format;
-
-    vk::GraphicsPipelineCreateInfo gp{};
-    gp.pNext = &rci;
-    gp.stageCount = 2;
-    gp.pStages = ss;
-    gp.pVertexInputState = &vi;
-    gp.pInputAssemblyState = &ia;
-    gp.pViewportState = &vp;
-    gp.pRasterizationState = &rs;
-    gp.pMultisampleState = &ms;
-    gp.pDepthStencilState = &dss;
-    gp.pColorBlendState = &cb;
-    gp.pDynamicState = &dy;
-    gp.layout = *pipeline_layout_;
-    pipeline_ = vk::raii::Pipeline{device, nullptr, gp};
+    shader_path_ = "res/vk/mesh.spv";
+    ShadowShader_path_ = "res/vk/shadow_mesh.spv";
+    (void)swapchain;
 
     return true;
   }
 
   void MeshPass::Destroy(VkContext &ctx)
   {
-    // 必须先等待 GPU 闲置
     ctx.Device().waitIdle();
+    // MeshPass 自身 GPU 缓冲资源
     instance_buf_ = nullptr;
     instance_mem_ = nullptr;
-
-    // 1. 释放管线相关
-    pipeline_ = nullptr;
-    pipeline_layout_ = nullptr;
-
-    // 2. 释放 UBO (先解映射，再清空容器)
-    UnmapAndClearMappedBuffers(ubo_mem_, ubo_map_);
-    ubo_buf_.clear();
-
-    // 3. 释放描述符
-    ubo_ds_.clear();
-    material_ds_.clear();
-    shadow_ds_.clear();
-    ubo_dp_ = nullptr;
-    material_dp_ = nullptr;
-    shadow_dp_ = nullptr;
-    ubo_dsl_ = nullptr;
-    material_dsl_ = nullptr;
-    shadow_dsl_ = nullptr;
-
-    // 4. 释放模型缓冲
     ib_ = nullptr;
     ib_mem_ = nullptr;
     vb_ = nullptr;
     vb_mem_ = nullptr;
-
-    // 5. 释放贴图资源数组
-    tex_views_.clear();
-    tex_imgs_.clear();
-    tex_mems_.clear();
-    texture_sampler_ = nullptr;
-
-    // 6. 清理逻辑数据
     sub_meshes_.clear();
+    // 重构后 pass_resources_ 统一由基类清理
+    ClearPassResources();
     IRenderPass::Destroy(ctx);
   }
 
@@ -376,7 +176,6 @@ namespace vkfw
     auto &cmd = *frame.cmd;
     uint32_t img = frame.image_index;
 
-    // 1. 更新当前帧的 UBO 数据
     CameraUBO ubo{};
     ubo.view = frame.globals->view;
     ubo.proj = frame.globals->proj;
@@ -390,13 +189,11 @@ namespace vkfw
     glm::vec3 const dir_to_light = (len2 > 1e-6f) ? glm::normalize(light_pos) : glm::vec3(0.0f, 1.0f, 0.0f);
     ubo.light_dir = glm::vec4(dir_to_light, 0.0f);
 
-    // 确保索引在范围内再拷贝
-    if (img < ubo_map_.size() && ubo_map_[img])
+    if (img < frame.resources->ubo_map.size() && frame.resources->ubo_map[img])
     {
-      std::memcpy(ubo_map_[img], &ubo, sizeof(ubo));
+      std::memcpy(frame.resources->ubo_map[img], &ubo, sizeof(ubo));
     }
 
-    // 2. 设置清理值与渲染附件
     vk::ClearValue clear_color{};
     clear_color.color = vk::ClearColorValue(std::array<float, 4>{{0.05f, 0.06f, 0.08f, 1.0f}});
 
@@ -425,10 +222,8 @@ namespace vkfw
     ri.pColorAttachments = &color_att;
     ri.pDepthAttachment = &depth_att;
 
-    // 4. 开始渲染
     cmd.beginRendering(ri);
-
-    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline_);
+    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pass_resources_.Colorpipeline);
 
     vk::Viewport vp{0.0f, 0.0f, (float)frame.swapchain_extent.width, (float)frame.swapchain_extent.height, 0.0f, 1.0f};
     cmd.setViewport(0, vp);
@@ -436,46 +231,56 @@ namespace vkfw
     vk::Rect2D sc{{0, 0}, frame.swapchain_extent};
     cmd.setScissor(0, sc);
 
-    JustDraw(cmd, *pipeline_layout_, img);
+    JustDraw(frame, cmd, *pass_resources_.pipeline_layout, img);
     cmd.endRendering();
   }
 
-  void MeshPass::JustDraw(vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index)
+  void MeshPass::JustDraw(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index)
   {
-    // cmd.bindVertexBuffers(0, *vb_, {0});
     std::vector<vk::Buffer> vertex_buffers = {*vb_, *instance_buf_};
     std::vector<vk::DeviceSize> offsets = {0, 0};
     cmd.bindVertexBuffers(0, vertex_buffers, offsets);
 
     cmd.bindIndexBuffer(*ib_, 0, vk::IndexType::eUint32);
 
-    bool const use_own_layout =
-        static_cast<VkPipelineLayout>(layout) == static_cast<VkPipelineLayout>(*pipeline_layout_);
-
-    // --- 核心：分子网格（树干、树叶）绘制 ---
     for (const auto &sm : sub_meshes_)
     {
-      if (!use_own_layout)
-      {
-        // Shadow pass: bind material (alpha) at set=1
-        uint32_t const idx = image_index * static_cast<uint32_t>(textures_.size()) + sm.textureIndex;
-        if (idx < material_ds_.size())
-          cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 1, {*material_ds_[idx]}, {});
-      }
-      else
-      {
-        if (image_index < ubo_ds_.size())
-          cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 0, {*ubo_ds_[image_index]}, {});
-        if (image_index < shadow_ds_.size())
-          cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 2, {*shadow_ds_[image_index]}, {});
+      uint32_t const idx = image_index * static_cast<uint32_t>(textures_.size()) + sm.textureIndex;
 
-        uint32_t const idx = image_index * static_cast<uint32_t>(textures_.size()) + sm.textureIndex;
-        if (idx < material_ds_.size())
-          cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 1, {*material_ds_[idx]}, {});
-      }
+        if (image_index < frame.resources->ubo_ds_info.sets.size() &&
+            image_index < frame.resources->shadow_ds_info.sets.size() &&
+            idx < pass_resources_.material_ds_info.sets.size())
+        {
+          std::array<vk::DescriptorSet, 3> sets = {
+              *frame.resources->ubo_ds_info.sets[image_index],
+              *pass_resources_.material_ds_info.sets[idx],
+              *frame.resources->shadow_ds_info.sets[image_index]};
+          cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 0, sets, {});
+        }
+      
 
       cmd.drawIndexed(sm.indexCount, instance_count_, sm.firstIndex, 0, 0);
     }
+  }
+
+  void MeshPass::RecordShadow(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index)
+  {
+    if (frame.globals && frame.resources && image_index < frame.resources->ubo_map.size() && frame.resources->ubo_map[image_index])
+    {
+      CameraUBO ubo{};
+      ubo.view = frame.globals->view;
+      ubo.proj = frame.globals->proj;
+      ubo.light = frame.globals->light;
+      ubo.model = model_matrix_;
+      ubo.camera_pos = glm::vec4(frame.globals->camera_pos, 1.0f);
+      ubo.shadow_params = glm::vec4((debugParameter_ && debugParameter_->shadowmap) ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f);
+      glm::vec3 const light_pos = frame.globals->light_position;
+      float const len2 = glm::dot(light_pos, light_pos);
+      glm::vec3 const dir_to_light = (len2 > 1e-6f) ? glm::normalize(light_pos) : glm::vec3(0.0f, 1.0f, 0.0f);
+      ubo.light_dir = glm::vec4(dir_to_light, 0.0f);
+      std::memcpy(frame.resources->ubo_map[image_index], &ubo, sizeof(ubo));
+    }
+    JustDraw(frame, cmd, layout, image_index);
   }
 
 } // namespace vkfw

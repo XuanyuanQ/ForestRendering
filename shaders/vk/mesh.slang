@@ -12,13 +12,36 @@ struct CameraData {
 [[vk::binding(0, 0)]]
 ConstantBuffer<CameraData> ubo;
 
-// 1. 定义输入结构体 (必须与 Vertex Shader 的输出结构体 location 对应)
-struct FragmentInput
-{
-    [[vk::location(0)]] float3 normal : NORMAL;
-    [[vk::location(1)]] float2 uv     : TEXCOORD0;
-    [[vk::location(2)]] float4 light_clip : TEXCOORD1;
+
+struct VertexInput {
+    [[vk::location(0)]] float3 pos : POSITION;
+    [[vk::location(1)]] float3 normal : NORMAL;
+    [[vk::location(2)]] float2 uv : TEXCOORD0;
+    // 实例属性默认按列对齐插槽
+    [[vk::location(3)]] float4x4 instanceModel;
 };
+
+struct VertexOutput {
+    float4 sv_position : SV_Position;
+    [[vk::location(0)]] float3 normal;
+    [[vk::location(1)]] float2 uv;
+    [[vk::location(2)]] float4 light_clip;
+};
+
+[shader("vertex")]
+VertexOutput vertMain(VertexInput input) {
+    VertexOutput output;
+    // 计算世界坐标
+    float4 worldPos = mul(input.instanceModel, float4(input.pos, 1.0));
+    // 变换到裁剪空间
+    output.sv_position = mul(ubo.proj, mul(ubo.view, worldPos));
+    output.light_clip = mul(ubo.light, worldPos);
+    //output.sv_position = float4(input.pos, 1.0);
+    output.normal = mul((float3x3)input.instanceModel, input.normal);
+    output.uv = input.uv;
+    return output;
+}
+
 
 // 2. 定义资源绑定
 // 在 Slang 中，Texture 和 Sampler 通常成对使用
@@ -28,6 +51,7 @@ Sampler2D texSampler;
 
 [[vk::binding(0, 2)]]
 Sampler2D shadowMap;
+
 
 
 float ShadowFactor(float4 lightClip)
@@ -61,7 +85,7 @@ float ShadowFactor(float4 lightClip)
 
 // 3. 片段着色器入口
 [shader("fragment")]
-float4 main(FragmentInput input) : SV_Target
+float4 fragMain(VertexOutput input) : SV_Target
 {
     // 1. 采样贴图颜色
     // Slang/HLSL 使用 .Sample(sampler, uv) 语法

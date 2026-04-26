@@ -212,4 +212,17 @@ namespace vkfw
         mapped_ptrs.clear();
         memories.clear();
     }
+    // static vk::raii::Sampler CreateLinearRepeatSampler(const vk::raii::Device &device)
+    // {
+    //     vk::SamplerCreateInfo ci{};
+    //     ci.magFilter = vk::Filter::eLinear;
+    //     ci.minFilter = vk::Filter::eLinear;
+    //     ci.addressModeU = vk::SamplerAddressMode::eRepeat;
+    //     ci.addressModeV = vk::SamplerAddressMode::eRepeat;
+    //     ci.addressModeW = vk::SamplerAddressMode::eRepeat;
+    //     // 顺便可以在这里统一开启一些常用特性
+    //     ci.anisotropyEnable = VK_FALSE;
+    //     return vk::raii::Sampler{device, ci};
+    // }
+
 } // namespace Forest

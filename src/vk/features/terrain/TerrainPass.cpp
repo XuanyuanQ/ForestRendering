@@ -6,17 +6,10 @@
 #include "vk/renderer/RenderTargets.hpp"
 #include "vk/renderer/FrameGlobals.hpp"
 #include "vk/scene/Vertex.hpp"
-#include <imgui.h>
-#include <imgui_impl_vulkan.h>
 #include <array>
-#include <cassert>
-#include <chrono>
-#include <cstdint>
 #include <cstring>
-#include <fstream>
 #include <stdexcept>
 #include <vector>
-#include <iostream>
 
 namespace vkfw
 {
@@ -34,7 +27,6 @@ namespace vkfw
       data.vertices.reserve((xSegments + 1) * (ySegments + 1));
       data.indices.reserve(xSegments * ySegments * 6);
 
-      // Generate a quad on the XZ plane, centered at the origin.
       glm::vec3 const n = {0.0f, 1.0f, 0.0f};
       for (unsigned int iy = 0; iy <= ySegments; ++iy)
       {
@@ -64,7 +56,6 @@ namespace vkfw
           uint32_t const tl = ix + (iy + 1) * stride;
           uint32_t const tr = (ix + 1) + (iy + 1) * stride;
 
-          // CCW in Y-up space; matches `frontFace = eClockwise` after Vulkan NDC Y flip.
           data.indices.push_back(bl);
           data.indices.push_back(br);
           data.indices.push_back(tr);
@@ -79,126 +70,6 @@ namespace vkfw
     }
 
   } // namespace
-
-  void TerrainPass::CreateUniformBuffers(
-      const VkContext &ctx,
-      const vk::PhysicalDeviceMemoryProperties &mem_props,
-      uint32_t image_count)
-  {
-    (void)mem_props;
-    CreateMappedBuffers(ctx.Device(), ctx.PhysicalDevice(), image_count, sizeof(CameraUBO), vk::BufferUsageFlagBits::eUniformBuffer, ubo_buf_, ubo_mem_, ubo_map_);
-  }
-
-  void TerrainPass::CreatePipeline(
-      const vk::raii::Device &device,
-      const std::string &shader_path,
-      vk::Format color_format,
-      vk::Format depth_format)
-  {
-    // 1. 加载并创建着色器模块
-    // 注意：shader_module 是局部变量，但在函数结束前管线已经创建完成，所以没问题
-    auto const code = ReadFile(shader_path);
-    vk::ShaderModuleCreateInfo sm_ci{};
-    sm_ci.codeSize = code.size();
-    sm_ci.pCode = reinterpret_cast<uint32_t const *>(code.data());
-    vk::raii::ShaderModule shader_module{device, sm_ci};
-
-    // 2. 着色器阶段配置
-    // 注意：Vert 和 Frag 在同一个 SPV 里（你的代码是这么写的）
-    vk::PipelineShaderStageCreateInfo stages[2]{};
-    stages[0].stage = vk::ShaderStageFlagBits::eVertex;
-    stages[0].module = *shader_module;
-    stages[0].pName = "vertMain";
-
-    stages[1].stage = vk::ShaderStageFlagBits::eFragment;
-    stages[1].module = *shader_module;
-    stages[1].pName = "fragMain";
-
-    // 3. 顶点输入 (Vertex Input) - terrain is not instanced here
-    auto binding = VertexBindingDescriptions();
-    auto attrs = VertexAttributeDescriptions();
-    vk::PipelineVertexInputStateCreateInfo vi{};
-    vi.vertexBindingDescriptionCount = static_cast<uint32_t>(binding.size());
-    vi.pVertexBindingDescriptions = binding.data();
-    vi.vertexAttributeDescriptionCount = static_cast<uint32_t>(attrs.size());
-    vi.pVertexAttributeDescriptions = attrs.data();
-
-    // 4. 输入装配 (Input Assembly)
-    vk::PipelineInputAssemblyStateCreateInfo ia{};
-    ia.topology = vk::PrimitiveTopology::eTriangleList;
-
-    // 5. 视口与裁剪 (使用动态状态，所以这里只需指定数量)
-    vk::PipelineViewportStateCreateInfo vp_state{};
-    vp_state.viewportCount = 1;
-    vp_state.scissorCount = 1;
-
-    // 6. 光栅化 (Rasterization)
-    vk::PipelineRasterizationStateCreateInfo rs{};
-    rs.polygonMode = vk::PolygonMode::eFill;
-    rs.cullMode = vk::CullModeFlagBits::eNone;
-    rs.frontFace = vk::FrontFace::eClockwise;
-    rs.lineWidth = 1.0f;
-
-    // 7. 深度测试 (Depth Stencil)
-    vk::PipelineDepthStencilStateCreateInfo dss{};
-    dss.depthTestEnable = 1;
-    dss.depthWriteEnable = 1;
-    dss.depthCompareOp = vk::CompareOp::eLess;
-
-    // 8. 多重采样 (Multisample)
-    vk::PipelineMultisampleStateCreateInfo ms{};
-    ms.rasterizationSamples = vk::SampleCountFlagBits::e1;
-
-    // 9. 颜色混合 (Color Blend)
-    vk::PipelineColorBlendAttachmentState cb_att{};
-    cb_att.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
-                            vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
-    vk::PipelineColorBlendStateCreateInfo cb{};
-    cb.attachmentCount = 1;
-    cb.pAttachments = &cb_att;
-
-    // 10. 动态状态 (Dynamic State)
-    std::array<vk::DynamicState, 2> dyn{vk::DynamicState::eViewport, vk::DynamicState::eScissor};
-    vk::PipelineDynamicStateCreateInfo dyn_ci{};
-    dyn_ci.dynamicStateCount = static_cast<uint32_t>(dyn.size());
-    dyn_ci.pDynamicStates = dyn.data();
-
-    // 11. 管线布局 (Pipeline Layout)
-    // set=0 UBO, set=1 material, set=2 shadow map
-    vk::PipelineLayoutCreateInfo pl_ci{};
-    std::array<vk::DescriptorSetLayout, 3> set_layouts = {*ubo_dsl_, *material_dsl_, *shadow_dsl_};
-    pl_ci.setLayoutCount = static_cast<uint32_t>(set_layouts.size());
-    pl_ci.pSetLayouts = set_layouts.data();
-    pipeline_layout_ = vk::raii::PipelineLayout{device, pl_ci};
-
-    // 12. 动态渲染信息 (Rendering Create Info - KHR_dynamic_rendering)
-    vk::PipelineRenderingCreateInfo rendering_ci{};
-    rendering_ci.colorAttachmentCount = 1;
-    rendering_ci.pColorAttachmentFormats = &color_format;
-    if (depth_format != vk::Format::eUndefined)
-    {
-      rendering_ci.depthAttachmentFormat = depth_format;
-    }
-
-    // 13. 创建图形管线
-    vk::GraphicsPipelineCreateInfo gp_ci{};
-    gp_ci.pNext = &rendering_ci; // 关键：指向动态渲染配置
-    gp_ci.stageCount = 2;
-    gp_ci.pStages = stages;
-    gp_ci.pVertexInputState = &vi;
-    gp_ci.pInputAssemblyState = &ia;
-    gp_ci.pViewportState = &vp_state;
-    gp_ci.pRasterizationState = &rs;
-    gp_ci.pMultisampleState = &ms;
-    gp_ci.pDepthStencilState = (depth_format != vk::Format::eUndefined) ? &dss : nullptr;
-    gp_ci.pColorBlendState = &cb;
-    gp_ci.pDynamicState = &dyn_ci;
-    gp_ci.layout = *pipeline_layout_;
-    gp_ci.renderPass = nullptr; // 使用动态渲染时设为 nullptr
-
-    // 赋值给成员变量 pipeline_
-    pipeline_ = vk::raii::Pipeline{device, nullptr, gp_ci};
-  }
 
   void TerrainPass::CreateVertexBuffer(
       const VkContext &ctx,
@@ -253,7 +124,6 @@ namespace vkfw
   bool TerrainPass::Create(VkContext &ctx, VkSwapchain const &swapchain, RenderTargets &targets)
   {
     auto &device = ctx.Device();
-    // 获取内存属性供 FindMemoryType 使用
     auto const mem_props = ctx.PhysicalDevice().getMemoryProperties();
 
     {
@@ -262,89 +132,33 @@ namespace vkfw
       CreateIndexBuffer(ctx, mem_props, terrtain_);
     }
 
-    // 加载纹理 texture_
     LoadTexture(ctx, "res/forested-floor/textures/KiplingerFLOOR.png", 0);
     CreateCommonSampler(device);
+    shader_path_ = "res/vk/terrain.spv";
+    ShadowShader_path_ = "res/vk/shadow_terrarin.spv";
+    
     if (!targets.shadow_map.Valid())
       throw std::runtime_error("TerrainPass requires RenderTargets::shadow_map");
 
-    uint32_t const image_count = swapchain.ImageCount();
-    uint32_t const material_count = static_cast<uint32_t>(textures_.size());
-
-    // Descriptor set layouts (set=0 UBO, set=1 material, set=2 shadow map)
-    ubo_dsl_ = CreateSingleBindingDescriptorSetLayout(device, 0, vk::DescriptorType::eUniformBuffer, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment);
-    material_dsl_ = CreateSingleBindingDescriptorSetLayout(device, 0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment);
-    shadow_dsl_ = CreateSingleBindingDescriptorSetLayout(device, 0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment);
-
-    // Pools + allocate sets
-    ubo_dp_ = CreateSingleTypeDescriptorPool(device, vk::DescriptorType::eUniformBuffer, image_count, image_count);
-    ubo_ds_ = AllocateDescriptorSets(device, ubo_dp_, ubo_dsl_, image_count);
-
-    uint32_t const set_count = image_count * material_count;
-    material_dp_ = CreateSingleTypeDescriptorPool(device, vk::DescriptorType::eCombinedImageSampler, set_count, set_count);
-    material_ds_ = AllocateDescriptorSets(device, material_dp_, material_dsl_, set_count);
-
-    shadow_dp_ = CreateSingleTypeDescriptorPool(device, vk::DescriptorType::eCombinedImageSampler, image_count, image_count);
-    shadow_ds_ = AllocateDescriptorSets(device, shadow_dp_, shadow_dsl_, image_count);
-
-    CreateUniformBuffers(ctx, mem_props, image_count);
-
-    // Update UBO sets
-    for (uint32_t i = 0; i < image_count; ++i)
-    {
-      WriteUniformBufferDescriptor(device, *ubo_ds_[i], 0, *ubo_buf_[i], sizeof(CameraUBO));
-    }
-
-    // Update material sets
-    for (uint32_t i = 0; i < image_count; ++i)
-    {
-      for (uint32_t m = 0; m < material_count; ++m)
-      {
-        uint32_t const idx = i * material_count + m;
-        WriteCombinedImageSamplerDescriptor(device, *material_ds_[idx], 0, *common_sampler_, *textures_[m].view);
-      }
-    }
-
-    // Update shadow map sets
-    for (uint32_t i = 0; i < image_count; ++i)
-    {
-      WriteCombinedImageSamplerDescriptor(device, *shadow_ds_[i], 0, targets.shadow_map.sampler, targets.shadow_map.view);
-    }
-
-    CreatePipeline(device, "res/vk/terrain.spv", swapchain.Format(), targets.shared_depth.format);
+    (void)swapchain;
     return true;
   }
 
   void TerrainPass::Destroy(VkContext &ctx)
   {
-    // raii handles clean themselves up
     ctx.Device().waitIdle();
-    pipeline_ = nullptr;
-    pipeline_layout_ = nullptr;
-    ubo_ds_.clear();
-    material_ds_.clear();
-    shadow_ds_.clear();
-
-    ubo_dp_ = nullptr;
-    material_dp_ = nullptr;
-    shadow_dp_ = nullptr;
-
-    ubo_dsl_ = nullptr;
-    material_dsl_ = nullptr;
-    shadow_dsl_ = nullptr;
+    // TerrainPass 自身几何资源
     index_buffer_ = nullptr;
     index_memory_ = nullptr;
     vertex_buffer_ = nullptr;
     vertex_memory_ = nullptr;
-
-    UnmapAndClearMappedBuffers(ubo_mem_, ubo_map_);
-    ubo_buf_.clear();
+    // 重构后 pass_resources_ 统一由基类清理
+    ClearPassResources();
     IRenderPass::Destroy(ctx);
   }
 
   void TerrainPass::OnSwapchainRecreated(VkContext &, VkSwapchain const &, RenderTargets &)
   {
-    // For the minimal triangle, nothing swapchain-sized is owned here.
   }
 
   void TerrainPass::Record(FrameContext &frame, RenderTargets &targets)
@@ -369,10 +183,9 @@ namespace vkfw
     glm::vec3 const dir_to_light = (len2 > 1e-6f) ? glm::normalize(light_pos) : glm::vec3(0.0f, 1.0f, 0.0f);
     ubo.light_dir = glm::vec4(dir_to_light, 0.0f);
 
-    // 确保索引在范围内再拷贝
-    if (img < ubo_map_.size() && ubo_map_[img])
+    if (img < frame.resources->ubo_map.size() && frame.resources->ubo_map[img])
     {
-      std::memcpy(ubo_map_[img], &ubo, sizeof(ubo));
+      std::memcpy(frame.resources->ubo_map[img], &ubo, sizeof(ubo));
     }
 
     vk::ClearValue clear{};
@@ -404,51 +217,49 @@ namespace vkfw
     }
 
     cmd.beginRendering(ri);
-    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline_);
+    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pass_resources_.Colorpipeline);
     cmd.setViewport(0, vk::Viewport{0.0f, 0.0f, static_cast<float>(frame.swapchain_extent.width),
                                     static_cast<float>(frame.swapchain_extent.height), 0.0f, 1.0f});
     cmd.setScissor(0, vk::Rect2D{vk::Offset2D{0, 0}, frame.swapchain_extent});
-    JustDraw(cmd, *pipeline_layout_, img);
+    JustDraw(frame, cmd, *pass_resources_.pipeline_layout, img);
     cmd.endRendering();
-
-    // 注意：这里删除了 TransitionImage 到 PresentSrcKHR 的代码！
-    // 应该在所有 Pass 执行完后由 App 统一执行
   }
 
-  void TerrainPass::JustDraw(vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index)
+  void TerrainPass::JustDraw(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index)
   {
-    // 1. 绑定顶点和索引 (阴影和主场景都需要)
     cmd.bindIndexBuffer(*index_buffer_, 0, vk::IndexType::eUint32);
     cmd.bindVertexBuffers(0, *vertex_buffer_, {0});
 
-    // 2. 绑定描述符集
-    // 只有当外部传入的 layout 与本 pass 的 pipeline_layout_ 一致时，才绑定本 pass 的描述符集。
-    // ShadowPass 会在外部绑定它自己的光源矩阵 UBO 描述符集，避免 layout/DSL 不匹配导致崩溃。
-    bool const use_own_layout =
-        static_cast<VkPipelineLayout>(layout) == static_cast<VkPipelineLayout>(*pipeline_layout_);
-    if (!use_own_layout)
-    {
-      // Shadow pass: bind terrain material texture as alpha source at set=1
       uint32_t const mat_count = static_cast<uint32_t>(textures_.size());
       uint32_t const idx = image_index * mat_count;
-      if (idx < material_ds_.size())
+      if (image_index < frame.resources->ubo_ds_info.sets.size() && image_index < frame.resources->shadow_ds_info.sets.size() && idx < pass_resources_.material_ds_info.sets.size())
       {
-        cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 1, {*material_ds_[idx]}, {});
-      }
-    }
-    else
-    {
-      uint32_t const mat_count = static_cast<uint32_t>(textures_.size());
-      uint32_t const idx = image_index * mat_count;
-      if (image_index < ubo_ds_.size() && image_index < shadow_ds_.size() && idx < material_ds_.size())
-      {
-        std::array<vk::DescriptorSet, 3> sets = {*ubo_ds_[image_index], *material_ds_[idx], *shadow_ds_[image_index]};
+        std::array<vk::DescriptorSet, 3> sets = {*frame.resources->ubo_ds_info.sets[image_index], *pass_resources_.material_ds_info.sets[idx], *frame.resources->shadow_ds_info.sets[image_index]};
         cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 0, sets, {});
       }
-    }
+    
 
-    // 3. 执行绘制
     cmd.drawIndexed(static_cast<uint32_t>(terrtain_.indices.size()), 1, 0, 0, 0);
+  }
+
+  void TerrainPass::RecordShadow(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index)
+  {
+    if (frame.globals && frame.resources && image_index < frame.resources->ubo_map.size() && frame.resources->ubo_map[image_index])
+    {
+      CameraUBO ubo{};
+      ubo.view = frame.globals->view;
+      ubo.proj = frame.globals->proj;
+      ubo.light = frame.globals->light;
+      ubo.model = glm::mat4(1.0f);
+      ubo.camera_pos = glm::vec4(frame.globals->camera_pos, 1.0f);
+      ubo.shadow_params = glm::vec4((debugParameter_ && debugParameter_->shadowmap) ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f);
+      glm::vec3 const light_pos = frame.globals->light_position;
+      float const len2 = glm::dot(light_pos, light_pos);
+      glm::vec3 const dir_to_light = (len2 > 1e-6f) ? glm::normalize(light_pos) : glm::vec3(0.0f, 1.0f, 0.0f);
+      ubo.light_dir = glm::vec4(dir_to_light, 0.0f);
+      std::memcpy(frame.resources->ubo_map[image_index], &ubo, sizeof(ubo));
+    }
+    JustDraw(frame, cmd, layout, image_index);
   }
 
 } // namespace vkfw

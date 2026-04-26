@@ -1,5 +1,8 @@
 #include "vk/renderer/helper.hpp"
 #include "vk/renderer/IRenderPass.hpp"
+#include "vk/core/VkSwapchain.hpp"
+#include "vk/scene/Vertex.hpp"
+#include "vk/core/VkContext.hpp"
 #include "config.hpp"
 
 #include <stb_image.h>
@@ -284,11 +287,278 @@ namespace vkfw
   {
     std::ifstream file(filename, std::ios::ate | std::ios::binary);
     if (!file.is_open())
-      throw std::runtime_error("Failed to open file: " + filename);
+    {
+      std::cerr << "Failed to open file: " << filename << std::endl;
+      return {};
+      // throw std::runtime_error("Failed to open file: " + filename);
+    }
     std::vector<char> buffer(static_cast<size_t>(file.tellg()));
     file.seekg(0);
     file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
     return buffer;
+  }
+
+  void IRenderPass::SetupPassLayout(VkContext &ctx, VkSwapchain const &swapchain, RenderTargets &targets,FrameResource &frame_resources)
+  {
+    auto &device = ctx.Device();
+    uint32_t const image_count = swapchain.ImageCount();
+
+    bool const is_shadow_pass = (render_type_ == RenderType::Shadow);
+    bool const has_material_textures = !textures_.empty();
+    bool const needs_material_layout = has_material_textures || is_shadow_pass;
+
+    if (needs_material_layout)
+    {
+      pass_resources_.material_ds_info.layout = CreateSingleBindingDescriptorSetLayout(
+          device, 0, vk::DescriptorType::eCombinedImageSampler, vk::ShaderStageFlagBits::eFragment);
+
+      if (has_material_textures)
+      {
+        uint32_t const material_count = static_cast<uint32_t>(textures_.size());
+        uint32_t const set_count = image_count * material_count;
+        pass_resources_.material_ds_info.pool = CreateSingleTypeDescriptorPool(
+            device, vk::DescriptorType::eCombinedImageSampler, set_count, set_count);
+        pass_resources_.material_ds_info.sets = AllocateDescriptorSets(
+            device, pass_resources_.material_ds_info.pool, pass_resources_.material_ds_info.layout, set_count);
+        for (uint32_t i = 0; i < image_count; ++i)
+        {
+          for (uint32_t m = 0; m < material_count; ++m)
+          {
+            uint32_t const idx = i * material_count + m;
+            WriteCombinedImageSamplerDescriptor(
+                device, *pass_resources_.material_ds_info.sets[idx], 0, *common_sampler_, *textures_[m].view);
+          }
+        }
+      }
+    }
+
+    if (!needs_material_layout)
+    {
+      if (render_type_ == RenderType::Skybox)
+      {
+        vk::PipelineLayoutCreateInfo skybox_pl_ci{};
+        vk::DescriptorSetLayout skybox_set0 = *frame_resources.ubo_ds_info.layout;
+        skybox_pl_ci.setLayoutCount = 1;
+        skybox_pl_ci.pSetLayouts = &skybox_set0;
+        pass_resources_.pipeline_layout = vk::raii::PipelineLayout{device, skybox_pl_ci};
+      }
+      return;
+    }
+
+    vk::PipelineLayoutCreateInfo pl_ci{};
+    std::array<vk::DescriptorSetLayout, 3> set_layouts = {
+        *frame_resources.ubo_ds_info.layout,
+        *pass_resources_.material_ds_info.layout,
+        *frame_resources.shadow_ds_info.layout};
+    pl_ci.setLayoutCount = static_cast<uint32_t>(set_layouts.size());
+    pl_ci.pSetLayouts = set_layouts.data();
+    pass_resources_.pipeline_layout = vk::raii::PipelineLayout{device, pl_ci};
+
+    if (shader_path_ == "")
+    {
+      return;
+    }
+    pass_resources_.Colorpipeline = CreateColorPipeline(device, shader_path_, swapchain.Format(), targets.shared_depth.format);
+    if (ShadowShader_path_ == "")
+    {
+      return;
+    }
+    pass_resources_.Depthpipeline = CreateDepthPipeline(device, ShadowShader_path_, swapchain.Format(), vk::Format::eD32Sfloat);
+  }
+
+  vk::raii::Pipeline IRenderPass::CreateColorPipeline(
+      const vk::raii::Device &device,
+      const std::string &shader_path,
+      vk::Format color_format,
+      vk::Format depth_format)
+  {
+    // 1. 加载并创建着色器模块
+    // 注意：shader_module 是局部变量，但在函数结束前管线已经创建完成，所以没问题
+    auto const code = ReadFile(shader_path);
+    vk::ShaderModuleCreateInfo sm_ci{};
+    sm_ci.codeSize = code.size();
+    sm_ci.pCode = reinterpret_cast<uint32_t const *>(code.data());
+    vk::raii::ShaderModule shader_module{device, sm_ci};
+
+    // 2. 着色器阶段配置
+    // 注意：Vert 和 Frag 在同一个 SPV 里（你的代码是这么写的）
+    vk::PipelineShaderStageCreateInfo stages[2]{};
+    stages[0].stage = vk::ShaderStageFlagBits::eVertex;
+    stages[0].module = *shader_module;
+    stages[0].pName = "vertMain";
+
+    stages[1].stage = vk::ShaderStageFlagBits::eFragment;
+    stages[1].module = *shader_module;
+    stages[1].pName = "fragMain";
+
+    // 3. 顶点输入 (Vertex Input) - terrain is not instanced here
+    auto binding = VertexBindingDescriptions();
+    auto attrs = VertexAttributeDescriptions();
+    vk::PipelineVertexInputStateCreateInfo vi{};
+    vi.sType = vk::StructureType::ePipelineVertexInputStateCreateInfo;
+    vi.vertexBindingDescriptionCount = static_cast<uint32_t>(binding.size());
+    vi.pVertexBindingDescriptions = binding.data();
+    vi.vertexAttributeDescriptionCount = static_cast<uint32_t>(attrs.size());
+    vi.pVertexAttributeDescriptions = attrs.data();
+
+    // 4. 输入装配 (Input Assembly)
+    vk::PipelineInputAssemblyStateCreateInfo ia{};
+    ia.topology = vk::PrimitiveTopology::eTriangleList;
+
+    // 5. 视口与裁剪 (使用动态状态，所以这里只需指定数量)
+    vk::PipelineViewportStateCreateInfo vp_state{};
+    vp_state.viewportCount = 1;
+    vp_state.scissorCount = 1;
+
+    // 6. 光栅化 (Rasterization)
+    vk::PipelineRasterizationStateCreateInfo rs{};
+    rs.polygonMode = vk::PolygonMode::eFill;
+    rs.cullMode = vk::CullModeFlagBits::eNone;
+    rs.frontFace = vk::FrontFace::eClockwise;
+    rs.lineWidth = 1.0f;
+
+    // 7. 深度测试 (Depth Stencil)
+    vk::PipelineDepthStencilStateCreateInfo dss{};
+    dss.depthTestEnable = 1;
+    dss.depthWriteEnable = 1;
+    dss.depthCompareOp = vk::CompareOp::eLess;
+
+    // 8. 多重采样 (Multisample)
+    vk::PipelineMultisampleStateCreateInfo ms{};
+    ms.rasterizationSamples = vk::SampleCountFlagBits::e1;
+
+    // 9. 颜色混合 (Color Blend)
+    vk::PipelineColorBlendAttachmentState cb_att{};
+    cb_att.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+                            vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+    vk::PipelineColorBlendStateCreateInfo cb{};
+    cb.attachmentCount = 1;
+    cb.pAttachments = &cb_att;
+
+    // 10. 动态状态 (Dynamic State)
+    std::array<vk::DynamicState, 2> dyn{vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+    vk::PipelineDynamicStateCreateInfo dyn_ci{};
+    dyn_ci.dynamicStateCount = static_cast<uint32_t>(dyn.size());
+    dyn_ci.pDynamicStates = dyn.data();
+
+    // 12. 动态渲染信息 (Rendering Create Info - KHR_dynamic_rendering)
+    vk::PipelineRenderingCreateInfo rendering_ci{};
+    rendering_ci.colorAttachmentCount = 1;
+    rendering_ci.pColorAttachmentFormats = &color_format;
+    if (depth_format != vk::Format::eUndefined)
+    {
+      rendering_ci.depthAttachmentFormat = depth_format;
+    }
+
+    // 13. 创建图形管线
+    vk::GraphicsPipelineCreateInfo gp_ci{};
+    gp_ci.pNext = &rendering_ci; // 关键：指向动态渲染配置
+    gp_ci.stageCount = 2;
+    gp_ci.pStages = stages;
+    gp_ci.pVertexInputState = &vi;
+    gp_ci.pInputAssemblyState = &ia;
+    gp_ci.pViewportState = &vp_state;
+    gp_ci.pRasterizationState = &rs;
+    gp_ci.pMultisampleState = &ms;
+    gp_ci.pDepthStencilState = (depth_format != vk::Format::eUndefined) ? &dss : nullptr;
+    gp_ci.pColorBlendState = &cb;
+    gp_ci.pDynamicState = &dyn_ci;
+    // gp_ci.layout = *pipeline_layout_;
+    gp_ci.layout = *pass_resources_.pipeline_layout;
+    gp_ci.renderPass = nullptr; // 使用动态渲染时设为 nullptr
+
+    // 赋值给成员变量 pipeline_
+    return vk::raii::Pipeline{device, nullptr, gp_ci};
+  }
+
+  vk::raii::Pipeline IRenderPass::CreateDepthPipeline(const vk::raii::Device &device,
+                                                      const std::string &shader_path,
+                                                      vk::Format color_format,
+                                                      vk::Format depth_format)
+  {
+    // 加载 shadow.vert.spv (只有顶点着色器)
+    auto const code = ReadFile(shader_path);
+    vk::ShaderModuleCreateInfo sm_ci{.codeSize = code.size(), .pCode = (uint32_t *)code.data()};
+    vk::raii::ShaderModule shader_module{device, sm_ci};
+
+    vk::PipelineShaderStageCreateInfo stages[2]{};
+    stages[0].stage = vk::ShaderStageFlagBits::eVertex;
+    stages[0].module = *shader_module;
+    stages[0].pName = "vertMain";
+    ;
+    stages[1].stage = vk::ShaderStageFlagBits::eFragment;
+    stages[1].module = *shader_module;
+    stages[1].pName = "fragMain";
+
+    // 顶点输入：和 Terrain 一模一样，这样可以复用同一个 VBO
+    auto binding = VertexBindingDescriptions();
+    auto attrs = VertexAttributeDescriptions();
+    vk::PipelineVertexInputStateCreateInfo vi{};
+    vi.vertexBindingDescriptionCount = static_cast<uint32_t>(binding.size());
+    vi.pVertexBindingDescriptions = binding.data();
+    vi.vertexAttributeDescriptionCount = static_cast<uint32_t>(attrs.size());
+    vi.pVertexAttributeDescriptions = attrs.data();
+
+    // 3. 输入装配
+    vk::PipelineInputAssemblyStateCreateInfo ia{};
+    ia.topology = vk::PrimitiveTopology::eTriangleList;
+
+    // 4. 视口与裁剪 (设为动态，方便根据 ShadowMap 大小调整)
+    vk::PipelineViewportStateCreateInfo vp{};
+    vp.viewportCount = 1;
+    vp.scissorCount = 1;
+
+    // 5. 光栅化 (关键：开启 Depth Bias 防止阴影粉刺)
+    vk::PipelineRasterizationStateCreateInfo rs{};
+    rs.polygonMode = vk::PolygonMode::eFill;
+    rs.cullMode = vk::CullModeFlagBits::eBack; // 剔除背面防止自遮挡
+    rs.frontFace = vk::FrontFace::eCounterClockwise;
+    rs.lineWidth = 1.0f;
+
+    // 强制开启深度偏移
+    rs.depthBiasEnable = VK_TRUE;
+    rs.depthBiasConstantFactor = 1.25f; // 常数偏移
+    rs.depthBiasSlopeFactor = 1.75f;    // 斜率偏移
+
+    // 6. 多重采样 (阴影图通常不开启 MSAA)
+    vk::PipelineMultisampleStateCreateInfo ms{};
+    ms.rasterizationSamples = vk::SampleCountFlagBits::e1;
+
+    // 7. 深度测试 (必须开启写入)
+    vk::PipelineDepthStencilStateCreateInfo dss{};
+    dss.depthTestEnable = VK_TRUE;
+    dss.depthWriteEnable = VK_TRUE;
+    dss.depthCompareOp = vk::CompareOp::eLessOrEqual;
+
+    // 8. 颜色混合 (关键：必须设为 0，因为没有颜色附件)
+    vk::PipelineColorBlendStateCreateInfo cb{};
+    cb.attachmentCount = 0;
+    cb.pAttachments = nullptr;
+
+    // 9. 动态状态
+    std::array<vk::DynamicState, 2> dyn = {vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+    vk::PipelineDynamicStateCreateInfo dyn_ci{};
+    dyn_ci.dynamicStateCount = static_cast<uint32_t>(dyn.size());
+    dyn_ci.pDynamicStates = dyn.data();
+
+    // 10. 渲染结构定义 (使用动态渲染 Dynamic Rendering)
+    vk::PipelineRenderingCreateInfo rendering_ci{.depthAttachmentFormat = depth_format};
+
+    vk::GraphicsPipelineCreateInfo gp_ci{};
+    gp_ci.pNext = &rendering_ci; // 关联动态渲染
+    gp_ci.stageCount = 2;
+    gp_ci.pStages = stages;
+    gp_ci.pVertexInputState = &vi;
+    gp_ci.pInputAssemblyState = &ia;
+    gp_ci.pViewportState = &vp;
+    gp_ci.pRasterizationState = &rs;
+    gp_ci.pMultisampleState = &ms;
+    gp_ci.pDepthStencilState = &dss;
+    gp_ci.pColorBlendState = &cb;
+    gp_ci.pDynamicState = &dyn_ci;
+    gp_ci.layout = *pass_resources_.pipeline_layout; // 包含光源矩阵 UBO 的布局
+
+    return vk::raii::Pipeline{device, nullptr, gp_ci};
   }
 
 } // namespace vkfw

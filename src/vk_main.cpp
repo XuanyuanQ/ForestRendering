@@ -3,29 +3,19 @@
 #include "vk/core/VkContext.hpp"
 #include "vk/core/VkFrameSync.hpp"
 #include "vk/core/VkSwapchain.hpp"
-#include "vk/features/gbuffer/GBufferPass.hpp"
-#include "vk/features/lighting/LightingPass.hpp"
-#include "vk/features/post/PostProcessPass.hpp"
 #include "vk/features/shadow/ShadowPass.hpp"
 #include "vk/features/ui/ImGuiPass.hpp"
 #include "vk/features/terrain/TerrainPass.hpp"
 #include "vk/features/skybox/SkyboxPass.hpp"
+#include "vk/features/mesh/MeshPass.hpp"
 #include "vk/renderer/VkRenderer.hpp"
 
 #include <GLFW/glfw3.h>
-#include <imgui.h>
-#include <imgui_impl_glfw.h>
-#define IMGUI_IMPL_VULKAN_HAS_DYNAMIC_RENDERING
-#include <imgui_impl_vulkan.h>
-#include <iostream>
-#include <cstdlib>
 #include <memory>
 #include <stdexcept>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
-
-#include "vk/features/mesh/MeshPass.hpp"
 
 namespace
 {
@@ -133,26 +123,16 @@ private:
 
     sync_.Init(ctx_, kFramesInFlight);
 
-    // Swapchain creates from the window size via VkContext::Window().
     vkfw::SwapchainInfo si{};
     swapchain_.Init(ctx_, si);
     sync_.EnsureRenderFinishedSize(ctx_, swapchain_.ImageCount());
 
-    // Shadow -> GBuffer -> Post -> Lighting -> UI
     std::string modelPath = "res/47-mapletree/MapleTree.obj";
-    renderer_.AddPass(std::make_unique<vkfw::SkyboxPass>());
-    renderer_.AddPass(std::make_unique<vkfw::MeshPass>(modelPath));
-    // renderer_.AddPass(std::make_unique<vkfw::ShadowPass>());
-    // renderer_.AddPass(std::make_unique<vkfw::GBufferPass>());
-    // renderer_.AddPass(std::make_unique<vkfw::PostProcessPass>());
-    // renderer_.AddPass(std::make_unique<vkfw::LightingPass>()); // draws the triangle for now
-    renderer_.AddPass(std::make_unique<vkfw::TerrainPass>());
-    renderer_.AddPass(std::make_unique<vkfw::ImGuiPass>());
-
-    renderer_.AddObjectPass(std::make_unique<vkfw::MeshPass>(modelPath));
-    renderer_.AddObjectPass(std::make_unique<vkfw::TerrainPass>());
-
-    renderer_.setShowDepthPass(std::make_unique<vkfw::ShadowPass>(2048));
+    renderer_.AddObjectPass(std::make_unique<vkfw::ShadowPass>(vkfw::RenderType::Shadow, 2048));
+    renderer_.AddObjectPass(std::make_unique<vkfw::SkyboxPass>(vkfw::RenderType::Skybox));
+    renderer_.AddObjectPass(std::make_unique<vkfw::MeshPass>(vkfw::RenderType::Opaque, modelPath));
+    renderer_.AddObjectPass(std::make_unique<vkfw::TerrainPass>(vkfw::RenderType::Opaque));
+    renderer_.AddObjectPass(std::make_unique<vkfw::ImGuiPass>(vkfw::RenderType::UI));
 
     if (!renderer_.Create(ctx_, swapchain_, sync_, debugParameter_))
       throw std::runtime_error("vkfw::VkRenderer::Create failed");
@@ -192,9 +172,6 @@ private:
       float t = std::chrono::duration<float>(now - start_time).count();
       last_time = now;
 
-      // Light control:
-      // - animation=true  -> auto orbit (updates _sunTime)
-      // - animation=false -> manual sliders (Light X/Y/Z)
       if (debugParameter_.animation)
       {
         _sunTime += dt * debugParameter_.daySpeed;
@@ -211,7 +188,6 @@ private:
       if (glfwGetKey(window_, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window_, GLFW_TRUE);
 
-      // RMB mouse look
       if (glfwGetMouseButton(window_, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
       {
         if (!mouse_look)
@@ -250,7 +226,6 @@ private:
         camera.pos -= glm::vec3{0, 1, 0} * speed;
 
       vkfw::FrameGlobals globals{};
-      // std::cout << "Light Position: " << _lightPosition.x << ", " << _lightPosition.y << ", " << _lightPosition.z << std::endl;
       auto light_world_to_clip_matrix = updateLightMatrix(_lightPosition);
       globals.light = light_world_to_clip_matrix;
       globals.view = camera.View();
@@ -268,19 +243,13 @@ private:
   glm::mat4 updateLightMatrix(const glm::vec3 light_pos)
   {
 
-    // Defines the size of the area covered by the shadow.
     float boxSize = 150.0f;
-
-    // Near/Far
-    // float nearPlane = 1.0f;
-    // float farPlane = 3000.0f;
     float nearPlane = 1.0f, farPlane = 1000.5f;
-    // Vulkan clip space: depth 0..1, and we flip Y like the camera projection.
     auto lightProjection =
         glm::orthoRH_ZO(-boxSize, boxSize, -boxSize, boxSize, nearPlane, farPlane);
     lightProjection[1][1] *= -1.0f;
 
-    glm::vec3 target = glm::vec3(0.0f, 0.0f, 0.0f); // center of forest
+    glm::vec3 target = glm::vec3(0.0f, 0.0f, 0.0f);
     glm::mat4 lightView =
         glm::lookAt(light_pos, target, glm::vec3(0.0, 1.0, 0.2));
 

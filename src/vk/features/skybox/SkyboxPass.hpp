@@ -13,6 +13,7 @@ namespace vkfw
   class SkyboxPass final : public IRenderPass
   {
   public:
+    explicit SkyboxPass(RenderType render_type = RenderType::Skybox) : IRenderPass(render_type) {};
     bool Create(VkContext &ctx, VkSwapchain const &swapchain, RenderTargets &targets) override;
     void Destroy(VkContext &ctx) override;
     void OnSwapchainRecreated(VkContext &ctx, VkSwapchain const &swapchain, RenderTargets &targets) override;
@@ -27,19 +28,15 @@ namespace vkfw
       glm::vec3 _pad{0.0f};
     };
 
-    vk::raii::PipelineLayout pipeline_layout_{nullptr};
-    vk::raii::Pipeline pipeline_{nullptr};
+    void CreatePipeline(const vk::raii::Device &device, vk::Format color_format, vk::Format depth_format);
+    void CreateDescriptors(VkContext &ctx, uint32_t image_count);
 
-    vk::raii::Buffer vertex_buffer_{nullptr};
-    vk::raii::DeviceMemory vertex_memory_{nullptr};
-
-    vk::raii::DescriptorSetLayout dsl_{nullptr};
-    vk::raii::DescriptorPool dp_{nullptr};
-    std::vector<vk::raii::DescriptorSet> ds_{};
-
+    DescriptorSetInfos ubo_ds_info_{};
     std::vector<vk::raii::Buffer> ubo_buf_{};
     std::vector<vk::raii::DeviceMemory> ubo_mem_{};
     std::vector<void *> ubo_map_{};
+    vk::raii::Buffer vertex_buffer_{nullptr};
+    vk::raii::DeviceMemory vertex_memory_{nullptr};
   };
 } // namespace vkfw
 

@@ -44,10 +44,20 @@ namespace vkfw
     void CreateSharedDepth(VkContext &ctx, vk::Extent2D extent);
     void DestroySharedDepth(VkContext &ctx);
     void SyncSharedDepthTargets() noexcept;
+    void CreateFrameResources(VkContext &ctx, VkSwapchain const &swapchain, RenderTargets &targets);
+    void RefreshFrameShadowDescriptors(VkContext &ctx, VkSwapchain const &swapchain);
+    template <typename Fn>
+    void ForEachPassByType(RenderType type, Fn &&fn)
+    {
+      for (auto &pass : pass_nodes_)
+      {
+        if (pass->GetRenderType() != type)
+          continue;
+        fn(*pass);
+      }
+    }
 
-    std::vector<std::unique_ptr<IRenderPass>> passes_;
-    std::vector<std::unique_ptr<IRenderPass>> ObjectPasses_;
-    std::unique_ptr<ShadowPass> shadow_pass_;
+    std::vector<std::unique_ptr<IRenderPass>> pass_nodes_;
     RenderTargets targets_{};
 
     vk::raii::CommandPool command_pool_{nullptr};
@@ -60,6 +70,9 @@ namespace vkfw
     vk::raii::Image shared_depth_img_{nullptr};
     vk::raii::DeviceMemory shared_depth_mem_{nullptr};
     vk::raii::ImageView shared_depth_view_{nullptr};
+
+    FrameResource frame_resources_;
+    vk::raii::Sampler common_sampler_{nullptr};
   };
 
 } // namespace vkfw
