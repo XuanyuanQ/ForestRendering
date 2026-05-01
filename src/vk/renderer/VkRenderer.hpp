@@ -6,6 +6,7 @@
 #include "vk/renderer/FrameContext.hpp"
 #include "vk/renderer/RenderTargets.hpp"
 #include "vk/renderer/FrameGlobals.hpp"
+#include "vk/renderer/IRenderPass.hpp"
 
 namespace vkfw
 {
@@ -13,7 +14,6 @@ namespace vkfw
   class VkContext;
   class VkSwapchain;
   class VkFrameSync;
-  class IRenderPass;
   class ShadowPass;
 
   class VkRenderer

@@ -10,6 +10,7 @@
 #include "vk/features/mesh/MeshPass.hpp"
 #include "vk/features/gbuffer/GBufferPass.hpp"
 #include "vk/features/lighting/LightingPass.hpp"
+#include "vk/features/volumetric/VolumetricLightPass.hpp"
 #include "vk/renderer/VkRenderer.hpp"
 
 #include <GLFW/glfw3.h>
@@ -136,6 +137,7 @@ private:
     renderer_.AddObjectPass(std::make_unique<vkfw::MeshPass>(vkfw::RenderType::Opaque, modelPath));
     renderer_.AddObjectPass(std::make_unique<vkfw::TerrainPass>(vkfw::RenderType::Opaque));
     renderer_.AddObjectPass(std::make_unique<vkfw::LightingPass>(vkfw::RenderType::Lighting));
+    renderer_.AddObjectPass(std::make_unique<vkfw::VolumetricLightPass>(vkfw::RenderType::Lighting));
     renderer_.AddObjectPass(std::make_unique<vkfw::ImGuiPass>(vkfw::RenderType::UI));
 
     if (!renderer_.Create(ctx_, swapchain_, sync_, debugParameter_))
