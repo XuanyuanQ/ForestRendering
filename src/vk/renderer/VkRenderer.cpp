@@ -202,24 +202,11 @@ namespace vkfw
     CreateCommandResources(ctx, sync);
     CreateSharedDepth(ctx, swapchain.Extent());
 
-    ForEachPassByType(RenderType::Shadow, [&](IRenderPass &pass) {
-      pass.Create(ctx, swapchain, targets_);
-    });
-    ForEachPassByType(RenderType::GBuffer, [&](IRenderPass &pass) {
-      pass.Create(ctx, swapchain, targets_);
-    });
-
     CreateFrameResources(ctx, swapchain, targets_);
 
     for (auto type : kPassOrder)
     {
       ForEachPassByType(type, [&](IRenderPass &pass) {
-        if (type == RenderType::Shadow || type == RenderType::GBuffer)
-        {
-          pass.setDebugParameter(param);
-          pass.SetupPassLayout(ctx, swapchain, targets_, frame_resources_);
-          return;
-        }
         if (!pass.Create(ctx, swapchain, targets_))
           throw std::runtime_error("vkfw::VkRenderer::Create pass create failed");
         pass.setDebugParameter(param);
