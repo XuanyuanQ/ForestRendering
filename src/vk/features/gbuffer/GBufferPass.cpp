@@ -174,15 +174,15 @@ namespace vkfw
       const std::function<void(vk::raii::CommandBuffer &cmd, const vk::PipelineLayout &layout)> &draw_callback)
   {
     auto &cmd = *frame.cmd;
-
+    // 1. 准备一个容器，用来装所有的屏障
+    std::vector<vk::ImageMemoryBarrier2> barriers;
     auto transition_color = [&](GBufferAttachmentResource &attachment)
     {
       vk::AccessFlags2 const src_access =
           attachment.layout == vk::ImageLayout::eShaderReadOnlyOptimal ? vk::AccessFlagBits2::eShaderRead : vk::AccessFlags2{};
       vk::PipelineStageFlags2 const src_stage =
           attachment.layout == vk::ImageLayout::eShaderReadOnlyOptimal ? vk::PipelineStageFlagBits2::eFragmentShader : vk::PipelineStageFlagBits2::eTopOfPipe;
-      TransitionImage(cmd,
-                      *attachment.image,
+      auto barrier= TransitionImage(*attachment.image,
                       attachment.layout,
                       vk::ImageLayout::eColorAttachmentOptimal,
                       vk::ImageAspectFlagBits::eColor,
@@ -190,12 +190,18 @@ namespace vkfw
                       vk::AccessFlagBits2::eColorAttachmentWrite,
                       src_stage,
                       vk::PipelineStageFlagBits2::eColorAttachmentOutput);
+      barriers.push_back(barrier);            
       attachment.layout = vk::ImageLayout::eColorAttachmentOptimal;
     };
 
     transition_color(gbuffer_.diffuse);
     transition_color(gbuffer_.specular);
     transition_color(gbuffer_.normal);
+
+    vk::DependencyInfo dep{};
+    dep.imageMemoryBarrierCount = static_cast<uint32_t>(barriers.size());
+    dep.pImageMemoryBarriers = barriers.data();;
+    cmd.pipelineBarrier2(dep);
 
     vk::AccessFlags2 const depth_src_access =
         gbuffer_.depth.layout == vk::ImageLayout::eShaderReadOnlyOptimal ? vk::AccessFlagBits2::eShaderRead : vk::AccessFlags2{};
@@ -254,14 +260,13 @@ namespace vkfw
     cmd.beginRendering(ri);
     cmd.setViewport(0, vk::Viewport{0.0f, 0.0f, static_cast<float>(gbuffer_.extent.width), static_cast<float>(gbuffer_.extent.height), 0.0f, 1.0f});
     cmd.setScissor(0, vk::Rect2D{{0, 0}, gbuffer_.extent});
-    vk::PipelineLayout gbuffer_layout{};
-    draw_callback(cmd, gbuffer_layout);
+    draw_callback(cmd, *pass_resources_.pipeline_layout);
     cmd.endRendering();
 
+    barriers.clear();
     auto transition_to_shader_read = [&](GBufferAttachmentResource &attachment, vk::ImageAspectFlags aspect, vk::PipelineStageFlags2 src_stage)
     {
-      TransitionImage(cmd,
-                      *attachment.image,
+      auto barrier = TransitionImage(*attachment.image,
                       attachment.layout,
                       vk::ImageLayout::eShaderReadOnlyOptimal,
                       aspect,
@@ -269,13 +274,17 @@ namespace vkfw
                       vk::AccessFlagBits2::eShaderRead,
                       src_stage,
                       vk::PipelineStageFlagBits2::eFragmentShader);
-      attachment.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+                       barriers.push_back(barrier); 
+                      attachment.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
     };
 
     transition_to_shader_read(gbuffer_.diffuse, vk::ImageAspectFlagBits::eColor, vk::PipelineStageFlagBits2::eColorAttachmentOutput);
     transition_to_shader_read(gbuffer_.specular, vk::ImageAspectFlagBits::eColor, vk::PipelineStageFlagBits2::eColorAttachmentOutput);
     transition_to_shader_read(gbuffer_.normal, vk::ImageAspectFlagBits::eColor, vk::PipelineStageFlagBits2::eColorAttachmentOutput);
     transition_to_shader_read(gbuffer_.depth, vk::ImageAspectFlagBits::eDepth, vk::PipelineStageFlagBits2::eLateFragmentTests);
+    dep.imageMemoryBarrierCount = static_cast<uint32_t>(barriers.size());
+    dep.pImageMemoryBarriers = barriers.data();;
+    cmd.pipelineBarrier2(dep);
     PublishTargets(targets);
   }
 

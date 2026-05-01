@@ -30,10 +30,6 @@ namespace vkfw
 
   struct FrameResource
   {
-    // 全局管线（如果多个 Pass 共用）
-    // vk::raii::PipelineLayout pipeline_layout{nullptr};
-    // vk::raii::Pipeline Colorpipeline{nullptr};
-    // vk::raii::Pipeline Depthpipeline{nullptr};
 
     // UBO 资源
     std::vector<vk::raii::Buffer> ubo_buf{};
@@ -64,10 +60,6 @@ namespace vkfw
     vk::raii::Pipeline Colorpipeline{nullptr};
     vk::raii::Pipeline Depthpipeline{nullptr};
     vk::raii::Pipeline GBufferPipeline{nullptr};
-
-    // std::vector<vk::raii::Buffer> ubo_buf{};
-    // std::vector<vk::raii::DeviceMemory> ubo_mem{};
-    // std::vector<void *> ubo_map{};
 
     // 描述符信息包
     // DescriptorSetInfos ubo_ds_info;      // set=0

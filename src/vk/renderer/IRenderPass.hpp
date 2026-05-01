@@ -39,11 +39,7 @@ namespace vkfw
                  const std::function<void(vk::raii::CommandBuffer &cmd, const vk::PipelineLayout &layout)> &draw_callback){};
     virtual void Record(FrameContext &frame, RenderTargets &targets) = 0;
     virtual void JustDraw(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index) {};
-    virtual void RecordShadow(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index)
-    {
-      JustDraw(frame, cmd, layout, image_index);
-    }
-    virtual void RecordGBuffer(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index)
+    virtual void DefferedRecord(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index)
     {
       JustDraw(frame, cmd, layout, image_index);
     }

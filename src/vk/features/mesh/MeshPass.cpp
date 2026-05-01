@@ -266,7 +266,7 @@ namespace vkfw
     }
   }
 
-  void MeshPass::RecordShadow(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index)
+  void MeshPass::DefferedRecord(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index)
   {
     if (frame.globals && frame.resources && image_index < frame.resources->ubo_map.size() && frame.resources->ubo_map[image_index])
     {
@@ -288,26 +288,5 @@ namespace vkfw
     JustDraw(frame, cmd, layout, image_index);
   }
 
-  void MeshPass::RecordGBuffer(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index)
-  {
-    if (frame.globals && frame.resources && image_index < frame.resources->ubo_map.size() && frame.resources->ubo_map[image_index])
-    {
-      CameraUBO ubo{};
-      ubo.view = frame.globals->view;
-      ubo.proj = frame.globals->proj;
-      ubo.light = frame.globals->light;
-      ubo.model = model_matrix_;
-      ubo.view_inv = glm::inverse(ubo.view);
-      ubo.proj_inv = glm::inverse(ubo.proj);
-      ubo.camera_pos = glm::vec4(frame.globals->camera_pos, 1.0f);
-      ubo.shadow_params = glm::vec4((debugParameter_ && debugParameter_->shadowmap) ? 1.0f : 0.0f, 0.0f, 0.0f, 0.0f);
-      glm::vec3 const light_pos = frame.globals->light_position;
-      float const len2 = glm::dot(light_pos, light_pos);
-      glm::vec3 const dir_to_light = (len2 > 1e-6f) ? glm::normalize(light_pos) : glm::vec3(0.0f, 1.0f, 0.0f);
-      ubo.light_dir = glm::vec4(dir_to_light, 0.0f);
-      std::memcpy(frame.resources->ubo_map[image_index], &ubo, sizeof(ubo));
-    }
-    JustDraw(frame, cmd, layout, image_index);
-  }
 
 } // namespace vkfw

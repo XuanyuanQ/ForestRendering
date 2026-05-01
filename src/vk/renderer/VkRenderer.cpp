@@ -305,7 +305,7 @@ namespace vkfw
           if (*depth_pipeline == VK_NULL_HANDLE)
             return;
           shadow_cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *depth_pipeline);
-          opaque.RecordShadow(frame, shadow_cmd, shadow_layout, frame.image_index);
+          opaque.DefferedRecord(frame, shadow_cmd, shadow_layout, frame.image_index);
         });
       });
     });
@@ -322,7 +322,7 @@ namespace vkfw
           if (*gbuffer_pipeline == VK_NULL_HANDLE || *gbuffer_pipeline_layout == VK_NULL_HANDLE)
             return;
           gbuffer_cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *gbuffer_pipeline);
-          opaque.RecordGBuffer(frame, gbuffer_cmd, *gbuffer_pipeline_layout, frame.image_index);
+          opaque.DefferedRecord(frame, gbuffer_cmd, *gbuffer_pipeline_layout, frame.image_index);
         });
       });
     });

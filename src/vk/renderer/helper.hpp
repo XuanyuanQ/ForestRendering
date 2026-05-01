@@ -53,9 +53,9 @@ namespace vkfw
                                 vk::PipelineStageFlags2 dst_stage)
     {
         vk::ImageMemoryBarrier2 barrier{};
-        barrier.srcStageMask = src_stage;
+        barrier.srcStageMask = src_stage; //执行当前阶段前必须完成哪些阶段的哪些操作
         barrier.srcAccessMask = src_access;
-        barrier.dstStageMask = dst_stage;
+        barrier.dstStageMask = dst_stage;//上个阶段完成后 接下来的哪些操作可以开始执行
         barrier.dstAccessMask = dst_access;
         barrier.oldLayout = old_layout;
         barrier.newLayout = new_layout;
@@ -72,6 +72,34 @@ namespace vkfw
         dep.imageMemoryBarrierCount = 1;
         dep.pImageMemoryBarriers = &barrier;
         cmd.pipelineBarrier2(dep);
+    }
+
+    inline vk::ImageMemoryBarrier2 TransitionImage(
+                                vk::Image image,
+                                vk::ImageLayout old_layout,
+                                vk::ImageLayout new_layout,
+                                vk::ImageAspectFlags aspect,
+                                vk::AccessFlags2 src_access,
+                                vk::AccessFlags2 dst_access,
+                                vk::PipelineStageFlags2 src_stage,
+                                vk::PipelineStageFlags2 dst_stage)
+    {
+        vk::ImageMemoryBarrier2 barrier{};
+        barrier.srcStageMask = src_stage; //执行当前阶段前必须完成哪些阶段的哪些操作
+        barrier.srcAccessMask = src_access;
+        barrier.dstStageMask = dst_stage;//上个阶段完成后 接下来的哪些操作可以开始执行
+        barrier.dstAccessMask = dst_access;
+        barrier.oldLayout = old_layout;
+        barrier.newLayout = new_layout;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = image;
+        barrier.subresourceRange.aspectMask = aspect;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+        return barrier;
     }
 
     // -------------------------
