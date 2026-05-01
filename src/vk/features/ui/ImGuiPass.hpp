@@ -23,7 +23,7 @@ private:
     void InitImGuiDynamic(VkContext& ctx, VkSwapchain const& swapchain, RenderTargets& targets);
 private:
   vkfw::ImGuiResources imu_resources_;
-  DebugParam* debugParameter_ = nullptr;
+  // DebugParam* debugParameter_ = nullptr;
   VkFormat imgui_color_format_ = VK_FORMAT_UNDEFINED;
 };
 

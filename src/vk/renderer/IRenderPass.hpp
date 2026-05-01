@@ -4,6 +4,7 @@
 #include "vk/renderer/helper.hpp"
 #include "vk/core/VkContext.hpp"
 #include "vk/renderer/FrameContext.hpp"
+#include "vk/renderer/FrameGlobals.hpp"
 #include <functional>
 namespace vkfw
 {
@@ -39,10 +40,7 @@ namespace vkfw
                  const std::function<void(vk::raii::CommandBuffer &cmd, const vk::PipelineLayout &layout)> &draw_callback){};
     virtual void Record(FrameContext &frame, RenderTargets &targets) = 0;
     virtual void JustDraw(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index) {};
-    virtual void DefferedRecord(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index)
-    {
-      JustDraw(frame, cmd, layout, image_index);
-    }
+    virtual void DefferedRecord(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index);
     virtual bool CastsShadow() const { return render_type_ == RenderType::Opaque; }
     virtual void setDebugParameter(DebugParam &param) {};
     RenderType GetRenderType() const { return render_type_; }
@@ -103,6 +101,7 @@ namespace vkfw
 
   protected:
     // 所有子类共享一份采样器
+    DebugParam* debugParameter_ = nullptr;
     static vk::raii::Sampler common_sampler_;
     std::vector<TextureResource> textures_;
     PassResource pass_resources_;

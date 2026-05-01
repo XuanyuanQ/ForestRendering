@@ -26,7 +26,6 @@ namespace vkfw
         void OnSwapchainRecreated(VkContext &ctx, VkSwapchain const &swapchain, RenderTargets &targets) override;
         void Record(FrameContext &frame, RenderTargets &targets) override;
         void JustDraw(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index) override;
-        void DefferedRecord(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index) override;
         void setDebugParameter(DebugParam &param) override { debugParameter_ = &param; }
 
     private:
@@ -61,7 +60,7 @@ namespace vkfw
 
         uint32_t total_index_count_ = 0;
         glm::mat4 model_matrix_{1.0f};
-        DebugParam *debugParameter_ = nullptr;
+        // DebugParam *debugParameter_ = nullptr;
     };
 
 } // namespace vkfw

@@ -21,7 +21,6 @@ namespace vkfw
     void OnSwapchainRecreated(VkContext &ctx, VkSwapchain const &swapchain, RenderTargets &targets) override;
     void Record(FrameContext &frame, RenderTargets &targets) override;
     void JustDraw(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index) override;
-    void DefferedRecord(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index) override;
     void setDebugParameter(DebugParam &param) override { debugParameter_ = &param; }
 
   private:
@@ -40,7 +39,7 @@ namespace vkfw
     vk::raii::Buffer index_buffer_{nullptr};
     vk::raii::DeviceMemory index_memory_{nullptr};
     Model terrtain_;
-    DebugParam *debugParameter_ = nullptr;
+    // DebugParam *debugParameter_ = nullptr;
   };
 
 } // namespace vkfw

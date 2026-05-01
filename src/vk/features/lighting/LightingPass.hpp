@@ -29,7 +29,7 @@ namespace vkfw
   private:
     vk::raii::PipelineLayout pipeline_layout_{nullptr};
     vk::raii::Pipeline pipeline_{nullptr};
-    DebugParam *debugParameter_ = nullptr;
+    // DebugParam *debugParameter_ = nullptr;
   };
 
 } // namespace vkfw
