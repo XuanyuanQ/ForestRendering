@@ -112,8 +112,14 @@ static bool DeviceSuitable(vk::raii::PhysicalDevice const& pd, vk::SurfaceKHR su
       return false;
   }
 
-  auto feats = pd.getFeatures2<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan13Features>();
+  auto feats = pd.getFeatures2<
+      vk::PhysicalDeviceFeatures2,
+      vk::PhysicalDeviceVulkan11Features,
+      vk::PhysicalDeviceVulkan13Features>();
+  auto const& f11 = feats.get<vk::PhysicalDeviceVulkan11Features>();
   auto const& f13 = feats.get<vk::PhysicalDeviceVulkan13Features>();
+  if (!f11.shaderDrawParameters)
+    return false;
   if (!f13.dynamicRendering || !f13.synchronization2)
     return false;
 
@@ -203,11 +209,14 @@ bool VkContext::Init(ContextCreateInfo const& info)
   qci.queueCount = 1;
   qci.pQueuePriorities = &priority;
 
+  vk::PhysicalDeviceVulkan11Features f11{};
+  f11.shaderDrawParameters = VK_TRUE;
   vk::PhysicalDeviceVulkan13Features f13{};
   f13.dynamicRendering = VK_TRUE;
   f13.synchronization2 = VK_TRUE;
+  f11.pNext = &f13;
   vk::PhysicalDeviceFeatures2 f2{};
-  f2.pNext = &f13;
+  f2.pNext = &f11;
 
   auto dev_exts = RequiredDeviceExtensions();
   vk::DeviceCreateInfo dci{};

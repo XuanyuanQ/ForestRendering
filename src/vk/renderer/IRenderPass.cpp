@@ -359,6 +359,15 @@ namespace vkfw
       return;
     }
     pass_resources_.Colorpipeline = CreateColorPipeline(device, shader_path_, swapchain.Format(), targets.shared_depth.format);
+    if (GBufferShader_path_ != "" && targets.gbuffer.Valid())
+    {
+      std::array<vk::Format, 3> gbuffer_formats = {
+          targets.gbuffer.diffuse.format,
+          targets.gbuffer.specular.format,
+          targets.gbuffer.normal.format};
+      pass_resources_.GBufferPipeline = CreateGBufferPipeline(
+          device, GBufferShader_path_, gbuffer_formats, targets.gbuffer.depth.format);
+    }
     if (ShadowShader_path_ == "")
     {
       return;
@@ -468,6 +477,96 @@ namespace vkfw
     gp_ci.renderPass = nullptr; // 使用动态渲染时设为 nullptr
 
     // 赋值给成员变量 pipeline_
+    return vk::raii::Pipeline{device, nullptr, gp_ci};
+  }
+
+  vk::raii::Pipeline IRenderPass::CreateGBufferPipeline(
+      const vk::raii::Device &device,
+      const std::string &shader_path,
+      std::array<vk::Format, 3> const &color_formats,
+      vk::Format depth_format)
+  {
+    auto const code = ReadFile(shader_path);
+    vk::ShaderModuleCreateInfo sm_ci{};
+    sm_ci.codeSize = code.size();
+    sm_ci.pCode = reinterpret_cast<uint32_t const *>(code.data());
+    vk::raii::ShaderModule shader_module{device, sm_ci};
+
+    vk::PipelineShaderStageCreateInfo stages[2]{};
+    stages[0].stage = vk::ShaderStageFlagBits::eVertex;
+    stages[0].module = *shader_module;
+    stages[0].pName = "vertMain";
+    stages[1].stage = vk::ShaderStageFlagBits::eFragment;
+    stages[1].module = *shader_module;
+    stages[1].pName = "fragMain";
+
+    auto binding = VertexBindingDescriptions();
+    auto attrs = VertexAttributeDescriptions();
+    vk::PipelineVertexInputStateCreateInfo vi{};
+    vi.sType = vk::StructureType::ePipelineVertexInputStateCreateInfo;
+    vi.vertexBindingDescriptionCount = static_cast<uint32_t>(binding.size());
+    vi.pVertexBindingDescriptions = binding.data();
+    vi.vertexAttributeDescriptionCount = static_cast<uint32_t>(attrs.size());
+    vi.pVertexAttributeDescriptions = attrs.data();
+
+    vk::PipelineInputAssemblyStateCreateInfo ia{};
+    ia.topology = vk::PrimitiveTopology::eTriangleList;
+
+    vk::PipelineViewportStateCreateInfo vp_state{};
+    vp_state.viewportCount = 1;
+    vp_state.scissorCount = 1;
+
+    vk::PipelineRasterizationStateCreateInfo rs{};
+    rs.polygonMode = vk::PolygonMode::eFill;
+    rs.cullMode = vk::CullModeFlagBits::eNone;
+    rs.frontFace = vk::FrontFace::eClockwise;
+    rs.lineWidth = 1.0f;
+
+    vk::PipelineDepthStencilStateCreateInfo dss{};
+    dss.depthTestEnable = VK_TRUE;
+    dss.depthWriteEnable = VK_TRUE;
+    dss.depthCompareOp = vk::CompareOp::eLess;
+
+    vk::PipelineMultisampleStateCreateInfo ms{};
+    ms.rasterizationSamples = vk::SampleCountFlagBits::e1;
+
+    std::array<vk::PipelineColorBlendAttachmentState, 3> cb_att{};
+    for (auto &att : cb_att)
+    {
+      att.colorWriteMask = vk::ColorComponentFlagBits::eR |
+                           vk::ColorComponentFlagBits::eG |
+                           vk::ColorComponentFlagBits::eB |
+                           vk::ColorComponentFlagBits::eA;
+    }
+    vk::PipelineColorBlendStateCreateInfo cb{};
+    cb.attachmentCount = static_cast<uint32_t>(cb_att.size());
+    cb.pAttachments = cb_att.data();
+
+    std::array<vk::DynamicState, 2> dyn{vk::DynamicState::eViewport, vk::DynamicState::eScissor};
+    vk::PipelineDynamicStateCreateInfo dyn_ci{};
+    dyn_ci.dynamicStateCount = static_cast<uint32_t>(dyn.size());
+    dyn_ci.pDynamicStates = dyn.data();
+
+    vk::PipelineRenderingCreateInfo rendering_ci{};
+    rendering_ci.colorAttachmentCount = static_cast<uint32_t>(color_formats.size());
+    rendering_ci.pColorAttachmentFormats = color_formats.data();
+    rendering_ci.depthAttachmentFormat = depth_format;
+
+    vk::GraphicsPipelineCreateInfo gp_ci{};
+    gp_ci.pNext = &rendering_ci;
+    gp_ci.stageCount = 2;
+    gp_ci.pStages = stages;
+    gp_ci.pVertexInputState = &vi;
+    gp_ci.pInputAssemblyState = &ia;
+    gp_ci.pViewportState = &vp_state;
+    gp_ci.pRasterizationState = &rs;
+    gp_ci.pMultisampleState = &ms;
+    gp_ci.pDepthStencilState = &dss;
+    gp_ci.pColorBlendState = &cb;
+    gp_ci.pDynamicState = &dyn_ci;
+    gp_ci.layout = *pass_resources_.pipeline_layout;
+    gp_ci.renderPass = nullptr;
+
     return vk::raii::Pipeline{device, nullptr, gp_ci};
   }
 

@@ -366,20 +366,13 @@ if (BUILD_VULKAN)
 		${CMAKE_DL_LIBS}
 		
 	)
-
+	copy_dlls (ForestSceneVk "${CMAKE_CURRENT_BINARY_DIR}")
 	install (
 		TARGETS ForestSceneVk
 		DESTINATION ${CMAKE_SOURCE_DIR}/src/bin
 	)
 endif ()
 
-copy_dlls (ForestScene "${CMAKE_CURRENT_BINARY_DIR}")
-message(${CMAKE_CURRENT_BINARY_DIR})
-message(${CMAKE_SOURCE_DIR})
-install (
-	TARGETS
-	DESTINATION ${CMAKE_SOURCE_DIR}/src/bin
-)
 
 
 # ------------------------------------------------------------------------------

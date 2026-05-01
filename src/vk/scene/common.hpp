@@ -28,6 +28,8 @@ namespace vkfw
         glm::vec4 camera_pos{0.0f};
         glm::vec4 shadow_params{1.0f, 0.0f, 0.0f, 0.0f}; // x: apply shadow (0/1)
         glm::vec4 light_dir{0.0f, 1.0f, 0.0f, 0.0f};     // xyz: world-space direction to light (directional)
+        glm::mat4 view_inv{1.0f};
+        glm::mat4 proj_inv{1.0f};
     };
 
     enum class RenderType {
@@ -35,6 +37,7 @@ namespace vkfw
         Skybox,      // 天空盒（通常最后画或最先画，关闭深度写入）
         Opaque,      // 普通不透明物体（Terrain, Mesh）
         Shadow,      // 阴影贴图生成（只写深度，不写颜色）
+        GBuffer,      // GBuffer 生成（写多个 Render Target）
         Lighting,    // 灯光处理/后处理
         Transparent  // 透明物体（需要排序）
         };

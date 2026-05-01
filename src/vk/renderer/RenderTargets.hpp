@@ -13,7 +13,7 @@ namespace vkfw
   // This is a skeleton; the real version will store Vulkan images/views.
   struct RenderTargets
   {
-    struct DepthTarget
+    struct AttachmentTarget
     {
       vk::Format format{vk::Format::eUndefined};
       vk::Extent2D extent{};
@@ -23,6 +23,9 @@ namespace vkfw
 
       bool Valid() const noexcept { return static_cast<VkImage>(image) != VK_NULL_HANDLE && static_cast<VkImageView>(view) != VK_NULL_HANDLE; }
     };
+
+    using DepthTarget = AttachmentTarget;
+    using ColorTarget = AttachmentTarget;
 
     DepthTarget shared_depth{};
 
@@ -44,6 +47,26 @@ namespace vkfw
     };
 
     ShadowMapTarget shadow_map{};
+
+    struct GBufferTarget
+    {
+      ColorTarget diffuse{};
+      ColorTarget specular{};
+      ColorTarget normal{};
+      DepthTarget depth{};
+      vk::Sampler sampler{};
+
+      bool Valid() const noexcept
+      {
+        return diffuse.Valid() &&
+               specular.Valid() &&
+               normal.Valid() &&
+               depth.Valid() &&
+               static_cast<VkSampler>(sampler) != VK_NULL_HANDLE;
+      }
+    };
+
+    GBufferTarget gbuffer{};
 
     bool has_shadow = false;
     bool has_gbuffer = false;

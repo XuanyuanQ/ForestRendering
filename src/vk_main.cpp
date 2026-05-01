@@ -8,6 +8,8 @@
 #include "vk/features/terrain/TerrainPass.hpp"
 #include "vk/features/skybox/SkyboxPass.hpp"
 #include "vk/features/mesh/MeshPass.hpp"
+#include "vk/features/gbuffer/GBufferPass.hpp"
+#include "vk/features/lighting/LightingPass.hpp"
 #include "vk/renderer/VkRenderer.hpp"
 
 #include <GLFW/glfw3.h>
@@ -130,8 +132,10 @@ private:
     std::string modelPath = "res/47-mapletree/MapleTree.obj";
     renderer_.AddObjectPass(std::make_unique<vkfw::ShadowPass>(vkfw::RenderType::Shadow, 2048));
     renderer_.AddObjectPass(std::make_unique<vkfw::SkyboxPass>(vkfw::RenderType::Skybox));
+    renderer_.AddObjectPass(std::make_unique<vkfw::GBufferPass>(vkfw::RenderType::GBuffer));
     renderer_.AddObjectPass(std::make_unique<vkfw::MeshPass>(vkfw::RenderType::Opaque, modelPath));
     renderer_.AddObjectPass(std::make_unique<vkfw::TerrainPass>(vkfw::RenderType::Opaque));
+    renderer_.AddObjectPass(std::make_unique<vkfw::LightingPass>(vkfw::RenderType::Lighting));
     renderer_.AddObjectPass(std::make_unique<vkfw::ImGuiPass>(vkfw::RenderType::UI));
 
     if (!renderer_.Create(ctx_, swapchain_, sync_, debugParameter_))

@@ -97,6 +97,16 @@ namespace vkfw
         return vk::raii::DescriptorSetLayout{device, ci};
     }
 
+    inline vk::raii::DescriptorSetLayout CreateDescriptorSetLayout(
+        const vk::raii::Device &device,
+        std::vector<vk::DescriptorSetLayoutBinding> const &bindings)
+    {
+        vk::DescriptorSetLayoutCreateInfo ci{};
+        ci.bindingCount = static_cast<uint32_t>(bindings.size());
+        ci.pBindings = bindings.data();
+        return vk::raii::DescriptorSetLayout{device, ci};
+    }
+
     inline vk::raii::DescriptorPool CreateSingleTypeDescriptorPool(
         const vk::raii::Device &device,
         vk::DescriptorType type,
@@ -105,6 +115,9 @@ namespace vkfw
     {
         vk::DescriptorPoolSize ps{type, descriptor_count};
         vk::DescriptorPoolCreateInfo ci{};
+        // Descriptor sets are wrapped by vk::raii::DescriptorSet and are freed
+        // individually on destruction, so pool must allow freeDescriptorSets.
+        ci.flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
         ci.maxSets = max_sets;
         ci.poolSizeCount = 1;
         ci.pPoolSizes = &ps;

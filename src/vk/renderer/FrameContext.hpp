@@ -44,6 +44,7 @@ namespace vkfw
     DescriptorSetInfos ubo_ds_info; // set=0
     // DescriptorSetInfos material_ds_info; // set=1
     DescriptorSetInfos shadow_ds_info; // set=2
+    DescriptorSetInfos gbuffer_ds_info;
 
     // 关键修复：
     FrameResource() = default;
@@ -62,6 +63,7 @@ namespace vkfw
     vk::raii::PipelineLayout pipeline_layout{nullptr};
     vk::raii::Pipeline Colorpipeline{nullptr};
     vk::raii::Pipeline Depthpipeline{nullptr};
+    vk::raii::Pipeline GBufferPipeline{nullptr};
 
     // std::vector<vk::raii::Buffer> ubo_buf{};
     // std::vector<vk::raii::DeviceMemory> ubo_mem{};

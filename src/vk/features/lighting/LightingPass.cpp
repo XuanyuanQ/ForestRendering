@@ -4,27 +4,31 @@
 #include "vk/core/VkSwapchain.hpp"
 #include "vk/renderer/FrameContext.hpp"
 #include "vk/renderer/RenderTargets.hpp"
-#include "vk/scene/Vertex.hpp"
-#include <imgui.h>
-#include <imgui_impl_vulkan.h>
+
 #include <array>
-#include <cassert>
-#include <chrono>
-#include <cstdint>
-#include <cstring>
-#include <fstream>
-#include <stdexcept>
-#include <vector>
 
 namespace vkfw
 {
 
-  bool LightingPass::Create(VkContext &ctx, VkSwapchain const &swapchain, RenderTargets &)
+  bool LightingPass::Create(VkContext &, VkSwapchain const &, RenderTargets &)
+  {
+    return true;
+  }
+
+  void LightingPass::SetupPassLayout(VkContext &ctx, VkSwapchain const &swapchain, RenderTargets &, FrameResource &frame_resources)
   {
     auto &device = ctx.Device();
 
-    // Shaders: reuse the existing demo SPIR-V that contains vertMain/fragMain.
-    auto const code = ReadFile("res/09_shader_base.spv");
+    vk::PipelineLayoutCreateInfo pl_ci{};
+    std::array<vk::DescriptorSetLayout, 3> set_layouts = {
+        *frame_resources.ubo_ds_info.layout,
+        *frame_resources.gbuffer_ds_info.layout,
+        *frame_resources.shadow_ds_info.layout};
+    pl_ci.setLayoutCount = static_cast<uint32_t>(set_layouts.size());
+    pl_ci.pSetLayouts = set_layouts.data();
+    pipeline_layout_ = vk::raii::PipelineLayout{device, pl_ci};
+
+    auto const code = ReadFile("res/vk/lighting.spv");
     vk::ShaderModuleCreateInfo sm_ci{};
     sm_ci.codeSize = code.size();
     sm_ci.pCode = reinterpret_cast<uint32_t const *>(code.data());
@@ -38,14 +42,7 @@ namespace vkfw
     stages[1].module = *shader_module;
     stages[1].pName = "fragMain";
 
-    auto binding = VertexBindingDescriptions();
-    auto attrs = VertexAttributeDescriptions();
     vk::PipelineVertexInputStateCreateInfo vi{};
-    vi.vertexBindingDescriptionCount = 1;
-    vi.pVertexBindingDescriptions = binding.data();
-    vi.vertexAttributeDescriptionCount = static_cast<uint32_t>(attrs.size());
-    vi.pVertexAttributeDescriptions = attrs.data();
-
     vk::PipelineInputAssemblyStateCreateInfo ia{};
     ia.topology = vk::PrimitiveTopology::eTriangleList;
 
@@ -55,7 +52,9 @@ namespace vkfw
 
     vk::PipelineRasterizationStateCreateInfo rs{};
     rs.polygonMode = vk::PolygonMode::eFill;
-    rs.cullMode = vk::CullModeFlagBits::eBack;
+    // Fullscreen triangle is generated from SV_VertexID and can have either winding
+    // depending on projection conventions; avoid accidental culling.
+    rs.cullMode = vk::CullModeFlagBits::eNone;
     rs.frontFace = vk::FrontFace::eClockwise;
     rs.lineWidth = 1.0f;
 
@@ -63,8 +62,10 @@ namespace vkfw
     ms.rasterizationSamples = vk::SampleCountFlagBits::e1;
 
     vk::PipelineColorBlendAttachmentState cb_att{};
-    cb_att.colorWriteMask = vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
-                            vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+    cb_att.colorWriteMask = vk::ColorComponentFlagBits::eR |
+                            vk::ColorComponentFlagBits::eG |
+                            vk::ColorComponentFlagBits::eB |
+                            vk::ColorComponentFlagBits::eA;
     vk::PipelineColorBlendStateCreateInfo cb{};
     cb.attachmentCount = 1;
     cb.pAttachments = &cb_att;
@@ -74,18 +75,7 @@ namespace vkfw
     dyn_ci.dynamicStateCount = static_cast<uint32_t>(dyn.size());
     dyn_ci.pDynamicStates = dyn.data();
 
-    vk::PushConstantRange pcr{};
-    pcr.stageFlags = vk::ShaderStageFlagBits::eFragment;
-    pcr.offset = 0;
-    pcr.size = sizeof(float);
-
-    vk::PipelineLayoutCreateInfo pl_ci{};
-    pl_ci.pushConstantRangeCount = 1;
-    pl_ci.pPushConstantRanges = &pcr;
-    pipeline_layout_ = vk::raii::PipelineLayout{device, pl_ci};
-
     vk::Format const color_format = swapchain.Format();
-
     vk::PipelineRenderingCreateInfo rendering_ci{};
     rendering_ci.colorAttachmentCount = 1;
     rendering_ci.pColorAttachmentFormats = &color_format;
@@ -105,104 +95,33 @@ namespace vkfw
     gp_ci.renderPass = nullptr;
 
     pipeline_ = vk::raii::Pipeline{device, nullptr, gp_ci};
-
-    // Geometry: a single triangle.
-    vertices_ = {{
-        {{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-        {{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-        {{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-    }};
-    std::array<uint16_t, 3> const indices = {{0, 1, 2}};
-
-    auto const mem_props = ctx.PhysicalDevice().getMemoryProperties();
-
-    {
-      vk::BufferCreateInfo bci{};
-      bci.size = sizeof(vertices_);
-      bci.usage = vk::BufferUsageFlagBits::eVertexBuffer;
-      bci.sharingMode = vk::SharingMode::eExclusive;
-      vertex_buffer_ = vk::raii::Buffer{device, bci};
-
-      auto req = vertex_buffer_.getMemoryRequirements();
-      vk::MemoryAllocateInfo mai{};
-      mai.allocationSize = req.size;
-      mai.memoryTypeIndex = FindMemoryType(ctx.PhysicalDevice(), req.memoryTypeBits,
-                                           vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-      vertex_memory_ = vk::raii::DeviceMemory{device, mai};
-      vertex_buffer_.bindMemory(*vertex_memory_, 0);
-
-      void *dst = vertex_memory_.mapMemory(0, bci.size);
-      std::memcpy(dst, vertices_.data(), sizeof(vertices_));
-      vertex_memory_.unmapMemory();
-    }
-
-    {
-      vk::BufferCreateInfo bci{};
-      bci.size = sizeof(indices);
-      bci.usage = vk::BufferUsageFlagBits::eIndexBuffer;
-      bci.sharingMode = vk::SharingMode::eExclusive;
-      index_buffer_ = vk::raii::Buffer{device, bci};
-
-      auto req = index_buffer_.getMemoryRequirements();
-      vk::MemoryAllocateInfo mai{};
-      mai.allocationSize = req.size;
-      mai.memoryTypeIndex = FindMemoryType(ctx.PhysicalDevice(), req.memoryTypeBits,
-                                           vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
-      index_memory_ = vk::raii::DeviceMemory{device, mai};
-      index_buffer_.bindMemory(*index_memory_, 0);
-
-      void *dst = index_memory_.mapMemory(0, bci.size);
-      std::memcpy(dst, indices.data(), sizeof(indices));
-      index_memory_.unmapMemory();
-    }
-
-    return true;
   }
 
-  void LightingPass::Destroy(VkContext &)
+  void LightingPass::Destroy(VkContext &ctx)
   {
-    // raii handles clean themselves up
+    ctx.Device().waitIdle();
     debugParameter_ = nullptr;
     pipeline_ = nullptr;
     pipeline_layout_ = nullptr;
-    index_buffer_ = nullptr;
-    index_memory_ = nullptr;
-    vertex_buffer_ = nullptr;
-    vertex_memory_ = nullptr;
-    // IRenderPass::Destroy(ctx);
+    IRenderPass::Destroy(ctx);
   }
 
   void LightingPass::OnSwapchainRecreated(VkContext &, VkSwapchain const &, RenderTargets &)
   {
-    // For the minimal triangle, nothing swapchain-sized is owned here.
   }
 
-  void LightingPass::Record(FrameContext &frame, RenderTargets &)
+  void LightingPass::Record(FrameContext &frame, RenderTargets &targets)
   {
-    if (debugParameter_ && debugParameter_->animation)
-    {
-      updateVertexBuffer();
-    }
-
-    if (frame.cmd == nullptr)
+    if (frame.cmd == nullptr || !targets.gbuffer.Valid())
       return;
 
     auto &cmd = *frame.cmd;
-
-    // Transition swapchain image for rendering.
-    TransitionImage(cmd, frame.swapchain_image, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR,
-                    vk::ImageAspectFlagBits::eColor, vk::AccessFlagBits2::eColorAttachmentWrite, {},
-                    vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::PipelineStageFlagBits2::eBottomOfPipe);
-
-    vk::ClearValue clear{};
-    clear.color = vk::ClearColorValue(std::array<float, 4>{{0.0f, 0.0f, 0.0f, 1.0f}});
 
     vk::RenderingAttachmentInfo att{};
     att.imageView = frame.swapchain_image_view;
     att.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
     att.loadOp = vk::AttachmentLoadOp::eLoad;
     att.storeOp = vk::AttachmentStoreOp::eStore;
-    att.clearValue = clear;
 
     vk::RenderingInfo ri{};
     ri.renderArea.offset = vk::Offset2D{0, 0};
@@ -216,45 +135,25 @@ namespace vkfw
     cmd.setViewport(0, vk::Viewport{0.0f, 0.0f, static_cast<float>(frame.swapchain_extent.width),
                                     static_cast<float>(frame.swapchain_extent.height), 0.0f, 1.0f});
     cmd.setScissor(0, vk::Rect2D{vk::Offset2D{0, 0}, frame.swapchain_extent});
-    cmd.bindVertexBuffers(0, *vertex_buffer_, {0});
-    cmd.bindIndexBuffer(*index_buffer_, 0, vk::IndexType::eUint16);
 
-    float t = 0.0f;
-    cmd.pushConstants<float>(*pipeline_layout_, vk::ShaderStageFlagBits::eFragment, 0, t);
-    cmd.drawIndexed(3, 1, 0, 0, 0);
+    if (frame.image_index < frame.resources->ubo_ds_info.sets.size() &&
+        frame.image_index < frame.resources->gbuffer_ds_info.sets.size() &&
+        frame.image_index < frame.resources->shadow_ds_info.sets.size())
+    {
+      std::array<vk::DescriptorSet, 3> sets = {
+          *frame.resources->ubo_ds_info.sets[frame.image_index],
+          *frame.resources->gbuffer_ds_info.sets[frame.image_index],
+          *frame.resources->shadow_ds_info.sets[frame.image_index]};
+      cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipeline_layout_, 0, sets, {});
+    }
 
+    cmd.draw(3, 1, 0, 0);
     cmd.endRendering();
-
-    // Transition to present.
-    TransitionImage(cmd, frame.swapchain_image, vk::ImageLayout::eColorAttachmentOptimal, vk::ImageLayout::ePresentSrcKHR,
-                    vk::ImageAspectFlagBits::eColor, vk::AccessFlagBits2::eColorAttachmentWrite, {},
-                    vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::PipelineStageFlagBits2::eBottomOfPipe);
   }
 
   void LightingPass::setDebugParameter(DebugParam &param)
   {
     debugParameter_ = &param;
-  }
-
-  void LightingPass::updateVertexBuffer()
-  {
-    static float dir = 1.0f;
-
-    vertices_[0].pos[0] += 0.01f * dir;
-
-    if (vertices_[0].pos[0] >= 1.0f)
-    {
-      vertices_[0].pos[0] = 1.0f;
-      dir = -1.0f;
-    }
-    else if (vertices_[0].pos[0] <= -1.0f)
-    {
-      vertices_[0].pos[0] = -1.0f;
-      dir = 1.0f;
-    }
-    void *data = vertex_memory_.mapMemory(0, sizeof(vertices_[0]) * vertices_.size());
-    memcpy(data, vertices_.data(), sizeof(vertices_[0]) * vertices_.size());
-    vertex_memory_.unmapMemory();
   }
 
 } // namespace vkfw

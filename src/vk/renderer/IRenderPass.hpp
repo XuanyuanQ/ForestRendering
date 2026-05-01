@@ -43,11 +43,15 @@ namespace vkfw
     {
       JustDraw(frame, cmd, layout, image_index);
     }
+    virtual void RecordGBuffer(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index)
+    {
+      JustDraw(frame, cmd, layout, image_index);
+    }
     virtual bool CastsShadow() const { return render_type_ == RenderType::Opaque; }
     virtual void setDebugParameter(DebugParam &param) {};
     RenderType GetRenderType() const { return render_type_; }
     PassResource const &GetPassResource() const noexcept { return pass_resources_; }  
-    void SetupPassLayout(VkContext &ctx, VkSwapchain const &swapchain, RenderTargets &targets, FrameResource &frame_resources);
+    virtual void SetupPassLayout(VkContext &ctx, VkSwapchain const &swapchain, RenderTargets &targets, FrameResource &frame_resources);
 
   protected:
     vk::raii::Pipeline CreateColorPipeline(
@@ -59,6 +63,11 @@ namespace vkfw
         const vk::raii::Device &device,
         const std::string &shader_path,
         vk::Format color_format,
+        vk::Format depth_format);
+    vk::raii::Pipeline CreateGBufferPipeline(
+        const vk::raii::Device &device,
+        const std::string &shader_path,
+        std::array<vk::Format, 3> const &color_formats,
         vk::Format depth_format);
 
     TextureResource LoadTextureResource(
@@ -92,6 +101,7 @@ namespace vkfw
       pass_resources_.material_ds_info.layout = nullptr;
       pass_resources_.Colorpipeline = nullptr;
       pass_resources_.Depthpipeline = nullptr;
+      pass_resources_.GBufferPipeline = nullptr;
       pass_resources_.pipeline_layout = nullptr;
     }
 
@@ -102,6 +112,7 @@ namespace vkfw
     PassResource pass_resources_;
     std::string shader_path_ = "";
     std::string ShadowShader_path_ = "";
+    std::string GBufferShader_path_ = "";
     RenderType render_type_ = RenderType::Opaque;
 
   };

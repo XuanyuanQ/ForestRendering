@@ -3,6 +3,7 @@
 #include "vk/core/VkContext.hpp"
 #include "vk/core/VkFrameSync.hpp"
 #include "vk/core/VkSwapchain.hpp"
+#include "vk/features/gbuffer/GBufferPass.hpp"
 #include "vk/features/shadow/ShadowPass.hpp"
 #include "vk/renderer/IRenderPass.hpp"
 #include "vk/renderer/helper.hpp"
@@ -15,9 +16,10 @@ namespace vkfw
 {
   namespace
   {
-    constexpr std::array<RenderType, 6> kPassOrder = {
+    constexpr std::array<RenderType, 7> kPassOrder = {
         RenderType::Shadow,
         RenderType::Skybox,
+        RenderType::GBuffer,
         RenderType::Opaque,
         RenderType::Lighting,
         RenderType::Transparent,
@@ -64,6 +66,18 @@ namespace vkfw
     frame_resources_.shadow_ds_info.pool = CreateSingleTypeDescriptorPool(device, vk::DescriptorType::eCombinedImageSampler, image_count, image_count);
     frame_resources_.shadow_ds_info.sets = AllocateDescriptorSets(device, frame_resources_.shadow_ds_info.pool, frame_resources_.shadow_ds_info.layout, image_count);
 
+    //GBuffer 一共由diffuse、normal、specular、depth四个纹理组成，且每个纹理都需要一个描述符，因此这里直接创建四倍的描述符数量
+    std::vector<vk::DescriptorSetLayoutBinding> gbuffer_bindings = {
+        vk::DescriptorSetLayoutBinding{0, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment},
+        vk::DescriptorSetLayoutBinding{1, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment},
+        vk::DescriptorSetLayoutBinding{2, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment},
+        vk::DescriptorSetLayoutBinding{3, vk::DescriptorType::eCombinedImageSampler, 1, vk::ShaderStageFlagBits::eFragment}};
+    frame_resources_.gbuffer_ds_info.layout = CreateDescriptorSetLayout(device, gbuffer_bindings);
+    frame_resources_.gbuffer_ds_info.pool = CreateSingleTypeDescriptorPool(
+        device, vk::DescriptorType::eCombinedImageSampler, image_count * 4, image_count);
+    frame_resources_.gbuffer_ds_info.sets = AllocateDescriptorSets(
+        device, frame_resources_.gbuffer_ds_info.pool, frame_resources_.gbuffer_ds_info.layout, image_count);
+
     CreateMappedBuffers(ctx.Device(), ctx.PhysicalDevice(), image_count, sizeof(CameraUBO),
                         vk::BufferUsageFlagBits::eUniformBuffer,
                         frame_resources_.ubo_buf, frame_resources_.ubo_mem, frame_resources_.ubo_map);
@@ -85,6 +99,24 @@ namespace vkfw
     {
       WriteCombinedImageSamplerDescriptor(device, *frame_resources_.shadow_ds_info.sets[i], 0,
                                           targets_.shadow_map.sampler, targets_.shadow_map.view);
+    }
+  }
+
+  void VkRenderer::RefreshFrameGBufferDescriptors(VkContext &ctx, VkSwapchain const &swapchain)
+  {
+    if (!targets_.gbuffer.Valid() || frame_resources_.gbuffer_ds_info.sets.empty())
+      return;
+
+    auto &device = ctx.Device();
+    uint32_t const image_count = swapchain.ImageCount();
+    uint32_t const update_count = std::min(image_count, static_cast<uint32_t>(frame_resources_.gbuffer_ds_info.sets.size()));
+    for (uint32_t i = 0; i < update_count; ++i)
+    {
+      auto const &set = *frame_resources_.gbuffer_ds_info.sets[i];
+      WriteCombinedImageSamplerDescriptor(device, set, 0, targets_.gbuffer.sampler, targets_.gbuffer.diffuse.view, vk::ImageLayout::eShaderReadOnlyOptimal);
+      WriteCombinedImageSamplerDescriptor(device, set, 1, targets_.gbuffer.sampler, targets_.gbuffer.specular.view, vk::ImageLayout::eShaderReadOnlyOptimal);
+      WriteCombinedImageSamplerDescriptor(device, set, 2, targets_.gbuffer.sampler, targets_.gbuffer.normal.view, vk::ImageLayout::eShaderReadOnlyOptimal);
+      WriteCombinedImageSamplerDescriptor(device, set, 3, targets_.gbuffer.sampler, targets_.gbuffer.depth.view, vk::ImageLayout::eShaderReadOnlyOptimal);
     }
   }
 
@@ -173,13 +205,16 @@ namespace vkfw
     ForEachPassByType(RenderType::Shadow, [&](IRenderPass &pass) {
       pass.Create(ctx, swapchain, targets_);
     });
+    ForEachPassByType(RenderType::GBuffer, [&](IRenderPass &pass) {
+      pass.Create(ctx, swapchain, targets_);
+    });
 
     CreateFrameResources(ctx, swapchain, targets_);
 
     for (auto type : kPassOrder)
     {
       ForEachPassByType(type, [&](IRenderPass &pass) {
-        if (type == RenderType::Shadow)
+        if (type == RenderType::Shadow || type == RenderType::GBuffer)
         {
           pass.setDebugParameter(param);
           pass.SetupPassLayout(ctx, swapchain, targets_, frame_resources_);
@@ -193,6 +228,7 @@ namespace vkfw
     }
 
     RefreshFrameShadowDescriptors(ctx, swapchain);
+    RefreshFrameGBufferDescriptors(ctx, swapchain);
     return true;
   }
 
@@ -211,6 +247,9 @@ namespace vkfw
     frame_resources_.shadow_ds_info.sets.clear();
     frame_resources_.shadow_ds_info.pool = nullptr;
     frame_resources_.shadow_ds_info.layout = nullptr;
+    frame_resources_.gbuffer_ds_info.sets.clear();
+    frame_resources_.gbuffer_ds_info.pool = nullptr;
+    frame_resources_.gbuffer_ds_info.layout = nullptr;
 
     DestroySharedDepth(ctx);
     DestroyCommandResources(ctx);
@@ -223,6 +262,7 @@ namespace vkfw
     for (auto &pass : pass_nodes_)
       pass->OnSwapchainRecreated(ctx, swapchain, targets_);
     RefreshFrameShadowDescriptors(ctx, swapchain);
+    RefreshFrameGBufferDescriptors(ctx, swapchain);
   }
 
   bool VkRenderer::DrawFrame(VkContext &ctx, VkSwapchain &swapchain, VkFrameSync &sync, FrameGlobals const &globals)
@@ -283,9 +323,28 @@ namespace vkfw
       });
     });
 
+    ForEachPassByType(RenderType::GBuffer, [&](IRenderPass &pass) {
+      auto *gbuffer_pass = dynamic_cast<GBufferPass *>(&pass);
+      if (!gbuffer_pass)
+        return;
+      gbuffer_pass->Execute(frame, targets_, [&](vk::raii::CommandBuffer &gbuffer_cmd, vk::PipelineLayout gbuffer_layout) {
+        (void)gbuffer_layout;
+        ForEachPassByType(RenderType::Opaque, [&](IRenderPass &opaque) {
+          auto const &gbuffer_pipeline = opaque.GetPassResource().GBufferPipeline;
+          auto const &gbuffer_pipeline_layout = opaque.GetPassResource().pipeline_layout;
+          if (*gbuffer_pipeline == VK_NULL_HANDLE || *gbuffer_pipeline_layout == VK_NULL_HANDLE)
+            return;
+          gbuffer_cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *gbuffer_pipeline);
+          opaque.RecordGBuffer(frame, gbuffer_cmd, *gbuffer_pipeline_layout, frame.image_index);
+        });
+      });
+    });
+
     for (auto type : kPassOrder)
     {
-      if (type == RenderType::Shadow)
+      if (type == RenderType::Shadow || type == RenderType::GBuffer)
+        continue;
+      if (type == RenderType::Opaque && targets_.has_gbuffer)
         continue;
       ForEachPassByType(type, [&](IRenderPass &pass) {
         pass.Record(frame, targets_);

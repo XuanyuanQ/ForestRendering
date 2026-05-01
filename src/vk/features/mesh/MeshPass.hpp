@@ -27,6 +27,7 @@ namespace vkfw
         void Record(FrameContext &frame, RenderTargets &targets) override;
         void JustDraw(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index) override;
         void RecordShadow(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index) override;
+        void RecordGBuffer(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index) override;
         void setDebugParameter(DebugParam &param) override { debugParameter_ = &param; }
 
     private:

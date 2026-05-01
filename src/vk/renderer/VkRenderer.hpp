@@ -46,6 +46,7 @@ namespace vkfw
     void SyncSharedDepthTargets() noexcept;
     void CreateFrameResources(VkContext &ctx, VkSwapchain const &swapchain, RenderTargets &targets);
     void RefreshFrameShadowDescriptors(VkContext &ctx, VkSwapchain const &swapchain);
+    void RefreshFrameGBufferDescriptors(VkContext &ctx, VkSwapchain const &swapchain);
     template <typename Fn>
     void ForEachPassByType(RenderType type, Fn &&fn)
     {
