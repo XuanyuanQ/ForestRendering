@@ -146,6 +146,7 @@ namespace vkfw
         ImGui::Checkbox("Apply ShadowMap", &debugParameter_->shadowmap);
         ImGui::Checkbox("Apply VolumetricLight", &debugParameter_->volumtricl);
         ImGui::SliderFloat("Day Speed", &debugParameter_->daySpeed, 0.1f, 5.0f);
+        ImGui::Text("texture tree count: %d", debugParameter_->treeCount);
         ImGui::TextUnformatted("Uncheck Auto Sun to use manual Light X/Y/Z.");
         ImGui::SliderFloat("Light X", &debugParameter_->lightX, -200.0f, 200.0f);
         ImGui::SliderFloat("Light Y", &debugParameter_->lightY, -200.0f, 200.0f);

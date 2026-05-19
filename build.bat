@@ -14,7 +14,7 @@ set VULKAN_SDK=D:/Setup/VulkanSDK
 set VK_INSTANCE_LAYERS=VK_LAYER_KHRONOS_validation
 set VK_LAYER_SETTINGS_PATH=VULKAN_SDK/Config
 set VK_LOADER_DEBUG=error,warn
-
+slangc .\shaders\vk\terrain_gbuffer.slang -target spirv -o .\res\vk\terrain_gbuffer.spv 
 :: 查看变量
 echo %VULKAN_SDK%
 @REM slangc .\res\09_shader_base.slang -target spirv -o .\res\09_shader_base.spv

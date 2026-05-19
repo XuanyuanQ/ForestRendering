@@ -184,5 +184,5 @@ float4 fragMain(VertexOutput input) : SV_Target
 
     // Alpha controls additive strength (pipeline uses SrcAlpha + One).
     float alpha = saturate(intensity * 0.65);
-    return float4(color, alpha);
+    return float4(color, 1.0);
 }

@@ -60,6 +60,7 @@ namespace vkfw
 
         uint32_t total_index_count_ = 0;
         glm::mat4 model_matrix_{1.0f};
+        std::vector<InstanceData> instance_matrices_;
         // DebugParam *debugParameter_ = nullptr;
     };
 

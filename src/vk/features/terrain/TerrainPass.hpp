@@ -11,7 +11,10 @@ import vulkan_hpp;
 
 namespace vkfw
 {
-
+  // 假设我们定义一个简单的结构体来传每个实例的偏移量
+  struct TerrainInstanceData {
+      glm::mat4 model; // 🟢 变成 64 字节的完整矩阵，跟 Shader 的 float4x4 严格对应
+  };
   class TerrainPass final : public IRenderPass
   {
   public:
@@ -24,6 +27,9 @@ namespace vkfw
     void setDebugParameter(DebugParam &param) override { debugParameter_ = &param; }
 
   private:
+  void CreateInstanceBuffer(
+    const VkContext &ctx,
+    const std::vector<TerrainInstanceData>& instance_data);
     void CreateVertexBuffer(
         const VkContext &ctx,
         const vk::PhysicalDeviceMemoryProperties &mem_props,
@@ -39,7 +45,14 @@ namespace vkfw
     vk::raii::Buffer index_buffer_{nullptr};
     vk::raii::DeviceMemory index_memory_{nullptr};
     Model terrtain_;
-    // DebugParam *debugParameter_ = nullptr;
+    // 在 TerrainPass 类中增加以下成员变量
+    vk::raii::Buffer        instance_buffer_ = nullptr;
+    vk::raii::DeviceMemory  instance_memory_ = nullptr;
+    uint32_t                instance_count_  = 0;
+    uint32_t index_count_ = 0;
+     std::vector<TerrainInstanceData> instance_matrices_;
+
+
   };
 
 } // namespace vkfw

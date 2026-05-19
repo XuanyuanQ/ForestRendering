@@ -17,6 +17,7 @@ struct VertexInput {
     [[vk::location(0)]] float3 pos : POSITION;
     [[vk::location(1)]] float3 normal : NORMAL;
     [[vk::location(2)]] float2 uv : TEXCOORD0;
+    [[vk::location(3)]] float4x4 instanceModel;
 };
 
 struct VertexOutput {
@@ -38,12 +39,13 @@ VertexOutput vertMain(VertexInput input) {
     VertexOutput output;
     
     // 修复点：变量名统一为 worldPos
-    float4 worldPos = float4(input.pos, 1.0);
+    // float4 worldPos = float4(input.pos, 1.0);
+    float4 worldPos = mul(input.instanceModel, float4(input.pos, 1.0));
     float time = 1.0; 
     
     // 计算波浪叠加
-    float wave1 = waveFun(time, 4.0, 0.2, 0.5, 2.0, float2(-1.0, 0.0), input.pos);
-    float wave2 = waveFun(time, 0.5, 0.4, 1.3, 2.0, float2(-0.7, 0.7), input.pos);
+    float wave1 = waveFun(time, 4.0, 0.2, 0.5, 2.0, float2(-1.0, 0.0), worldPos.xyz);
+    float wave2 = waveFun(time, 0.5, 0.4, 1.3, 2.0, float2(-0.7, 0.7), worldPos.xyz);
 
     // 应用高度偏移
     float heightOffset = 1.0 * (wave1 + wave2);
@@ -100,7 +102,7 @@ float ShadowFactor(float4 lightClip)
 [shader("fragment")]
 float4 fragMain(VertexOutput vertIn) : SV_TARGET {
     // 输出红色用于测试
-    float4 texColor = texSampler.Sample(vertIn.uv* 50.0);
+    float4 texColor = texSampler.Sample(vertIn.uv* 1.0);
 
     //return float4(0.0, vertIn.uv.y, 0.0, 1.0);
     if (ubo.shadowParams.x > 0.5)

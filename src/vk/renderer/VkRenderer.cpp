@@ -124,13 +124,13 @@ namespace vkfw
   {
     auto &device = ctx.Device();
 
-    vk::CommandPoolCreateInfo cpci{};
-    cpci.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
-    cpci.queueFamilyIndex = ctx.GraphicsQueueFamilyIndex();
-    command_pool_ = vk::raii::CommandPool{device, cpci};
+    // vk::CommandPoolCreateInfo cpci{};
+    // cpci.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
+    // cpci.queueFamilyIndex = ctx.GraphicsQueueFamilyIndex();
+    // command_pool_ = vk::raii::CommandPool{device, cpci};
 
     vk::CommandBufferAllocateInfo cbai{};
-    cbai.commandPool = *command_pool_;
+    cbai.commandPool = *ctx.CommandPool();
     cbai.level = vk::CommandBufferLevel::ePrimary;
     cbai.commandBufferCount = sync.FramesInFlight();
     command_buffers_ = device.allocateCommandBuffers(cbai);
@@ -282,6 +282,7 @@ namespace vkfw
     }
 
     FrameContext frame{};
+    // frame.command_pool_ = command_pool_;
     frame.cmd = &cmd;
     frame.frame_index = frame_index_;
     frame.image_index = image_index;

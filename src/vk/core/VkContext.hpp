@@ -44,6 +44,7 @@ public:
   vk::raii::Device& Device() const;
   vk::raii::Queue& GraphicsQueue() const;
   uint32_t GraphicsQueueFamilyIndex() const noexcept;
+  vk::raii::CommandPool const & CommandPool() const;
 
 private:
   class Impl;

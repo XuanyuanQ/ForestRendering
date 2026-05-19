@@ -51,6 +51,7 @@ namespace vkfw
         float lightX{-52.8f};
         float lightY{50.4f};
         float lightZ{100.0f};
+        int treeCount{400};
     };
 
 } // namespace Forest

@@ -79,6 +79,7 @@ public:
   vk::raii::Device device{nullptr};
   uint32_t graphics_queue_family_index = 0;
   vk::raii::Queue graphics_queue{nullptr};
+  vk::raii::CommandPool command_pool{nullptr};  
 };
 
 VkContext::VkContext() : impl_(new Impl()) {}
@@ -230,6 +231,12 @@ bool VkContext::Init(ContextCreateInfo const& info)
 
   impl_->graphics_queue = vk::raii::Queue{impl_->device, impl_->graphics_queue_family_index, 0};
 
+  
+    vk::CommandPoolCreateInfo cpci{};
+    cpci.flags = vk::CommandPoolCreateFlagBits::eResetCommandBuffer;
+    cpci.queueFamilyIndex = impl_->graphics_queue_family_index;
+    impl_->command_pool = vk::raii::CommandPool{impl_->device, cpci};
+
   impl_->initialized = true;
   
   return true;
@@ -239,6 +246,7 @@ bool VkContext::Init(ContextCreateInfo const& info)
 void VkContext::Shutdown()
 {
   impl_->graphics_queue = nullptr;
+  impl_->command_pool = nullptr;
   impl_->device = nullptr;
   impl_->physical_device = nullptr;
   impl_->surface = nullptr;
@@ -258,5 +266,9 @@ vk::raii::PhysicalDevice& VkContext::PhysicalDevice() const { return impl_->phys
 vk::raii::Device& VkContext::Device() const { return impl_->device; }
 vk::raii::Queue& VkContext::GraphicsQueue() const { return impl_->graphics_queue; }
 uint32_t VkContext::GraphicsQueueFamilyIndex() const noexcept { return impl_->graphics_queue_family_index; }
+vk::raii::CommandPool const & VkContext::CommandPool() const 
+{ 
+    return impl_->command_pool; 
+}
 
 } // namespace vkfw

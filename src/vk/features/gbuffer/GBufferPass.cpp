@@ -74,7 +74,7 @@ namespace vkfw
         vk::ImageUsageFlagBits::eColorAttachment,
         vk::ImageAspectFlagBits::eColor);
     out.normal = CreateAttachment(
-        ctx, extent, vk::Format::eR16G16B16A16Sfloat,
+        ctx, extent, vk::Format::eR8G8B8A8Unorm,
         vk::ImageUsageFlagBits::eColorAttachment,
         vk::ImageAspectFlagBits::eColor);
     out.depth = CreateAttachment(

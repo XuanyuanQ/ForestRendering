@@ -46,7 +46,7 @@ namespace vkfw
     std::uniform_real_distribution<float> rot_dist(0.0f, 360.0f);
     std::uniform_real_distribution<float> scale_dist(0.8f, 1.5f);
 
-    std::vector<InstanceData> instance_matrices;
+
     int count = 10;
     float spacing = 30.0f;
     for (int x = -count; x < count; x++)
@@ -63,12 +63,12 @@ namespace vkfw
         m = glm::scale(m, glm::vec3(s));
 
         data.model = m;
-        instance_matrices.push_back(data);
+        instance_matrices_.push_back(data);
       }
     }
-    instance_count_ = static_cast<uint32_t>(instance_matrices.size());
+    instance_count_ = static_cast<uint32_t>(instance_matrices_.size());
 
-    vk::DeviceSize buffer_size = sizeof(InstanceData) * instance_matrices.size();
+    vk::DeviceSize buffer_size = sizeof(InstanceData) * instance_matrices_.size();
     vk::BufferCreateInfo inst_ci{};
     inst_ci.size = buffer_size;
     inst_ci.usage = vk::BufferUsageFlagBits::eVertexBuffer;
@@ -85,7 +85,7 @@ namespace vkfw
     instance_buf_.bindMemory(*instance_mem_, 0);
 
     void *p_data = instance_mem_.mapMemory(0, buffer_size);
-    std::memcpy(p_data, instance_matrices.data(), (size_t)buffer_size);
+    std::memcpy(p_data, instance_matrices_.data(), (size_t)buffer_size);
     instance_mem_.unmapMemory();
 
     {
@@ -240,6 +240,52 @@ namespace vkfw
 
   void MeshPass::JustDraw(FrameContext &frame, vk::raii::CommandBuffer &cmd, vk::PipelineLayout layout, uint32_t image_index)
   {
+    glm::mat4 view_inv = glm::inverse(frame.globals->view);
+    glm::vec3 camera_pos = frame.globals->camera_pos;
+    glm::vec3 camera_forward = -glm::normalize(glm::vec3(view_inv[2]));
+    std::vector<InstanceData> visible_instances;
+    // 假设 instance_matrices_initial_ 是你在 Create 里生成的 400 个原始树位置
+    for (const auto& instance : instance_matrices_)
+    {
+      glm::vec3 tree_pos = glm::vec3(instance.model[3]); // 树的世界坐标
+        
+        // 1. 算出生长向量：从相机指向树
+        glm::vec3 cam_to_tree = tree_pos - camera_pos;
+        float dist = glm::length(cam_to_tree);
+        
+        // 防止和相机重合导致除以 0
+        if (dist < 0.1f) {
+            visible_instances.push_back(instance);
+            continue;
+        }
+        
+        // 2. 归一化方向
+        glm::vec3 dir_to_tree = cam_to_tree / dist;
+        
+        // 3. 【核心数学点积】：计算相机朝向和树木方向的夹角余弦值
+        float dot_product = glm::dot(camera_forward, dir_to_tree);
+        
+        // 4. 判定条件：
+        // dot_product > 0.5f 代表不仅在前面，而且大概在相机前方 120 度的视野（FOV）内
+        // 如果你只想严格剔除正后方，改成 dot_product > 0.0f 即可
+        // 同时保留一个远景裁剪（比如超过 150 米太远看不见的也扔掉）
+        if (dot_product > 0.2f && dist < 300.0f) 
+        {
+            visible_instances.push_back(instance);
+        }
+    }
+    // 更新这一帧真正要画的实例数量
+    instance_count_ = static_cast<uint32_t>(visible_instances.size());
+    // printf("Visible trees: %u\n", instance_count_);
+    // 如果这一帧一棵树都看不见，直接返回
+    debugParameter_->treeCount = instance_count_;
+    if (instance_count_ == 0) return;
+    // 把挑出来的可见树矩阵，刷进 GPU 能够得到的内存里
+    // 注：因为你的内存是 HostCoherent 的，直接 map/memcpy 即可
+    void* p_data = instance_mem_.mapMemory(0, sizeof(InstanceData) * visible_instances.size());
+    std::memcpy(p_data, visible_instances.data(), sizeof(InstanceData) * visible_instances.size());
+    instance_mem_.unmapMemory();
+
     std::vector<vk::Buffer> vertex_buffers = {*vb_, *instance_buf_};
     std::vector<vk::DeviceSize> offsets = {0, 0};
     cmd.bindVertexBuffers(0, vertex_buffers, offsets);
